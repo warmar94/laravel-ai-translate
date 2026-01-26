@@ -123,7 +123,89 @@ TRANSLATION_URL_DELAY=1
 QUEUE_CONNECTION=database
 ```
 
-### 6. Configure Queue Workers
+### 6. Edit AppServiceProvider's boot() 
+Add our custom code into the Service Provider
+
+```php
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+// Declare this on top
+use Illuminate\Support\Facades\Blade;
+
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        //
+    }
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+
+        // Translation collection mode - Blade directive
+        Blade::directive('__t', function ($expression) {
+            if (config('translation.translation_collection_mode', false)) {
+                return "<?php echo '<!--T_START:' . htmlspecialchars(__({$expression}), ENT_QUOTES, 'UTF-8') . ':T_END-->' . __({$expression}); ?>";
+            }
+            
+            return "<?php echo __({$expression}); ?>";
+        });
+
+        // ---------------------------
+        // Frontend global language variables
+        // ---------------------------
+        View::share([
+            // Current language code
+            'langCode' => app()->getLocale(),
+            
+            // RTL detection
+            'isRtl' => in_array(app()->getLocale(), config('translation.rtl_languages', [])),
+            
+            // Simple langUrl helper for Blade
+            'langUrl' => function ($routeName, $params = []) {
+                $lang = app()->getLocale();
+                if ($lang === 'en') {
+                    return route($routeName, $params);
+                }
+                return route($lang . '.' . $routeName, $params);
+            },
+            
+            // Helper to check if current route matches (works with language prefixes)
+            'isRoute' => function ($routeName) {
+                $currentRouteName = Route::currentRouteName();
+                
+                // Check if current route matches exactly
+                if ($currentRouteName === $routeName) {
+                    return true;
+                }
+                
+                // Check if current route matches with language prefix (ar.home, en.home, etc)
+                $allowedLangs = array_keys(config('translation.languages'));
+                foreach ($allowedLangs as $lang) {
+                    if ($currentRouteName === $lang . '.' . $routeName) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            },
+        ]);
+
+    }
+}
+```
+
+### 7. Configure Queue Workers
 
 **Development Environment:**
 
@@ -139,7 +221,7 @@ php artisan queue:work
 
 (For production, use a process manager like Supervisor)
 
-### 7. Create Required Database Tables
+### 8. Create Required Database Tables
 If you installed via Laravel Command skip this Step. Raw SQL also provided.
 
 Create a migration for the `translation_progress` table:
@@ -172,7 +254,7 @@ Run the migration:
 php artisan migrate
 ```
 
-### 8. Install Required Files
+### 9. Install Required Files
 If you installed via Laravel Command skip this Step.
 Copy the following files to your Laravel application:
 
@@ -202,7 +284,7 @@ Copy the following files to your Laravel application:
 - `resources/views/lang.blade.php`
 
 
-### 9. Clear Cache
+### 10. Clear Cache
 
 Clear configuration and view caches:
 
