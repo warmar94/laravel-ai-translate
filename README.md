@@ -1134,6 +1134,5 @@ Built with ❤️ using:
 ## 📞 Support
 For issues, questions, or contributions:
 - Open an issue on GitHub
-- Contact: [your-email@example.com]
 
 **Note:** Remember to never commit your `.env` file or expose your OpenAI API key publicly.
