@@ -15,9 +15,10 @@ class LaravelAiTranslateServiceProvider extends ServiceProvider
                 InstallAiTranslateCommand::class,
             ]);
 
-            // Publish migrations (auto-timestamp + .stub removal by Laravel)
-            $this->publishesMigrations([
-                __DIR__ . '/database/migrations' => database_path('migrations'),
+            // Migration
+            $this->publishes([
+                __DIR__ . '/database/migrations/2026_01_26_170933_create_translation_progress_table.php' =>
+                    database_path('migrations/2026_01_26_170933_create_translation_progress_table.php'),
             ], 'ai-translate-migrations');
         }
 
