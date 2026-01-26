@@ -139,9 +139,8 @@ php artisan queue:work
 
 (For production, use a process manager like Supervisor)
 
-### 7. Create Required Database Tablesú
-IF YOU INSTALLED VIA LARAVEL COMMAND SKIP THIS STEP..
-We also provide raw SQL file if you would like to create the table yourself!
+### 7. Create Required Database Tables
+If you installed via Laravel Command skip this Step. Raw SQL also provided.
 
 Create a migration for the `translation_progress` table:
 
@@ -174,7 +173,7 @@ php artisan migrate
 ```
 
 ### 8. Install Required Files
-IF YOU INSTALLED VIA LARAVEL COMMAND SKIP THIS STEP..
+If you installed via Laravel Command skip this Step.
 Copy the following files to your Laravel application:
 
 **Configuration:**
