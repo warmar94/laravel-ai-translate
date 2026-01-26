@@ -44,5 +44,6 @@ function langRoute($method, $path, $action, $name = null, $where = []) {
 langRoute('get', '/home', fn () => view('home'));
 
 // The Translation Dashboard (no need to translate)
+// Simple Livewire component to manage all your translations
 Route::get('/translation-dashboard', TranslateMenu::class)
     ->name('translation.dashboard');

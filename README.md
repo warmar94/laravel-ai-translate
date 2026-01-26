@@ -49,7 +49,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 ## ⚙️ Requirements
 
 - PHP 8.1+
-- Laravel 10+
+- Laravel 11+
 - OpenAI API Key
 - Queue worker (Redis recommended, Database queue supported)
 - Livewire 3.x
