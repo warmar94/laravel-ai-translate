@@ -1,0 +1,41 @@
+{
+    "name": "warmar/laravel-ai-translate",
+    "description": "Complete multilingual framework for Laravel with AI translation, automatic routing, SEO optimization, and RTL support",
+    "type": "library",
+    "keywords": [
+        "laravel",
+        "multilingual",
+        "translation",
+        "i18n",
+        "localization",
+        "openai",
+        "ai-translation",
+        "seo",
+        "routing"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Warmar",
+            "email": "contact@warmardev.com",
+            "homepage": "https://warmardev.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1|^8.2|^8.3",
+        "laravel/framework": "^10.0|^11.0",
+        "livewire/livewire": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Warmar\\LaravelAiTranslate\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Warmar\\LaravelAiTranslate\\LaravelAiTranslateServiceProvider"
+            ]
+        }
+    }
+}
