@@ -1118,7 +1118,7 @@ $urls = $collector->loadFromConfig();
 https://warmardev.com/
 
 ## Docs
-https://warmardev.com/laravel-translate.html
+https://warmardev.com/docs/laravel-translate.html
 
 ## 📄 License
 
