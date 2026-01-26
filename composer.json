@@ -11,16 +11,25 @@
         "openai",
         "ai-translation",
         "seo",
-        "routing"
+        "routing",
+        "rtl",
+        "hreflang"
     ],
+    "homepage": "https://warmardev.com",
     "license": "MIT",
     "authors": [
         {
             "name": "Warmar",
             "email": "contact@warmardev.com",
-            "homepage": "https://warmardev.com"
+            "homepage": "https://warmardev.com",
+            "role": "Developer"
         }
     ],
+    "support": {
+        "issues": "https://github.com/warmar94/laravel-ai-translate/issues",
+        "source": "https://github.com/warmar94/laravel-ai-translate",
+        "docs": "https://warmardev.com/docs/laravel-translate.html"
+    },
     "require": {
         "php": "^8.1|^8.2|^8.3",
         "laravel/framework": "^10.0|^11.0",
@@ -37,5 +46,7 @@
                 "Warmar\\LaravelAiTranslate\\LaravelAiTranslateServiceProvider"
             ]
         }
-    }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }
