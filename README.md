@@ -976,7 +976,7 @@ Customize the AI behavior in `config/translation.php`:
 
 ### Rate Limiting
 
-The system includes built-in rate limiting to respect OpenAI's API limits:
+The system includes built-in rate limiting to respect OpenAI's API rate limits:
 
 ```php
 // config/translation.php
@@ -1123,6 +1123,7 @@ $total = $collector->saveToConfig();
 // Load from config
 $urls = $collector->loadFromConfig();
 ```
+
 
 ## 👨‍💻 Developer: 
 https://warmardev.com/
