@@ -1136,5 +1136,4 @@ For issues, questions, or contributions:
 - Open an issue on GitHub
 - Contact: [your-email@example.com]
 
-**Note:** Remember to never commit your `.env` file or expose your OpenAI API key publicly.#   l a r a v e l - a i - t r a n s l a t e  
- 
+**Note:** Remember to never commit your `.env` file or expose your OpenAI API key publicly.
