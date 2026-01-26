@@ -110,17 +110,11 @@ return Application::configure(basePath: dirname(__DIR__))
 Add your OpenAI API key and settings to `.env`:
 
 ```env
-# OpenAI Configuration
-OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_MODEL=gpt-4o-mini
-
-# Translation Settings
+OPENAI_API_KEY=
 TRANSLATION_COLLECTION_MODE=false
-TRANSLATION_LOG_PROCESS=false
+OPENAI_MODEL=gpt-4o-mini
 TRANSLATION_URL_DELAY=1
-
-# Queue Configuration (recommended: database)
-QUEUE_CONNECTION=database
+TRANSLATION_LOG_PROCESS=false
 ```
 
 ### 6. Edit AppServiceProvider's boot() 
@@ -1212,6 +1206,9 @@ https://warmardev.com/
 
 ## Docs
 https://warmardev.com/docs/laravel-translate.html
+
+## Video
+https://youtu.be/-NVuDoGsgv8
 
 ## 📄 License
 
