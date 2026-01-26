@@ -54,6 +54,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - Queue worker (Redis recommended, Database queue supported)
 - Livewire 3.x
 
+
 ## 📦 Installation
 
 ### 1. Publish Laravel's Default Localization
@@ -62,7 +63,85 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 php artisan lang:publish
 ```
 
-### 2. Create Required Database Tables
+### 2. Install the package via Composer
+```bash
+composer require warmar/laravel-ai-translate
+```
+
+### 3. Install the package assets
+```bash
+php artisan ai-translate:install
+```
+
+### 4. Register Language Middleware
+
+Add the language middleware to `boostrap/app.php`:
+
+```php
+<?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+
+//Declare the middleware
+use App\Http\Middleware\LanguageMiddleware;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware) {
+        // Add language middleware
+        $middleware->alias([
+            'language' => LanguageMiddleware::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions) {
+        //
+    })->create();
+
+```
+
+### 5. Configure Environment
+
+Add your OpenAI API key and settings to `.env`:
+
+```env
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_MODEL=gpt-4o-mini
+
+# Translation Settings
+TRANSLATION_COLLECTION_MODE=false
+TRANSLATION_LOG_PROCESS=false
+TRANSLATION_URL_DELAY=1
+
+# Queue Configuration (recommended: database)
+QUEUE_CONNECTION=database
+```
+
+### 6. Configure Queue Workers
+
+**Development Environment:**
+
+If using `composer run dev`, queue workers are typically already running.
+
+**Production/Dedicated Server:**
+
+Start queue workers manually:
+
+```bash
+php artisan queue:work
+```
+
+(For production, use a process manager like Supervisor)
+
+### 7. Create Required Database Tablesú
+IF YOU INSTALLED VIA LARAVEL COMMAND SKIP THIS STEP..
+We also provide raw SQL file if you would like to create the table yourself!
 
 Create a migration for the `translation_progress` table:
 
@@ -75,14 +154,16 @@ Add the following schema:
 ```php
 Schema::create('translation_progress', function (Blueprint $table) {
     $table->id();
-    $table->string('type'); // 'string_extraction' or 'translation'
-    $table->string('locale')->nullable();
-    $table->integer('total')->default(0);
-    $table->integer('completed')->default(0);
-    $table->integer('failed')->default(0);
+    $table->enum('type', ['url_collection', 'string_extraction', 'translation']);
+    $table->string('locale', 10)->nullable();
+    $table->unsignedInteger('total')->default(0);
+    $table->unsignedInteger('completed')->default(0);
+    $table->unsignedInteger('failed')->default(0);
     $table->timestamp('started_at')->nullable();
+    $table->timestamp('updated_at')->nullable();
     $table->timestamp('completed_at')->nullable();
-    $table->timestamps();
+    
+    $table->unique(['type', 'locale']);
 });
 ```
 
@@ -92,8 +173,8 @@ Run the migration:
 php artisan migrate
 ```
 
-### 3. Install Required Files
-
+### 8. Install Required Files
+IF YOU INSTALLED VIA LARAVEL COMMAND SKIP THIS STEP..
 Copy the following files to your Laravel application:
 
 **Configuration:**
@@ -121,78 +202,8 @@ Copy the following files to your Laravel application:
 **Blade Views:**
 - `resources/views/lang.blade.php`
 
-### 4. Register Middleware
 
-Add the language middleware to `app/Http/Kernel.php`:
-
-```php
-protected $middlewareGroups = [
-    'web' => [
-        // ... other middleware
-        \App\Http\Middleware\LanguageMiddleware::class,
-    ],
-];
-```
-
-Or register as named middleware:
-
-```php
-protected $middlewareAliases = [
-    // ... other middleware
-    'language' => \App\Http\Middleware\LanguageMiddleware::class,
-];
-```
-
-### 5. Configure Environment
-
-Add your OpenAI API key and settings to `.env`:
-
-```env
-# OpenAI Configuration
-OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_MODEL=gpt-4o-mini
-
-# Translation Settings
-TRANSLATION_COLLECTION_MODE=false
-TRANSLATION_LOG_PROCESS=false
-TRANSLATION_URL_DELAY=1
-
-# Queue Configuration (recommended: redis)
-QUEUE_CONNECTION=redis
-```
-
-### 6. Configure Queue Workers
-
-**Development Environment:**
-
-If using `composer run dev`, queue workers are typically already running.
-
-**Production/Dedicated Server:**
-
-Start queue workers manually:
-
-```bash
-php artisan queue:work
-```
-
-For production, use a process manager like Supervisor:
-
-```ini
-[program:laravel-worker]
-process_name=%(program_name)s_%(process_num)02d
-command=php /path/to/your/app/artisan queue:work --sleep=3 --tries=3 --max-time=3600
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-user=www-data
-numprocs=8
-redirect_stderr=true
-stdout_logfile=/path/to/your/app/storage/logs/worker.log
-stopwaitsecs=3600
-```
-
-### 7. Clear Cache
+### 9. Clear Cache
 
 Clear configuration and view caches:
 
