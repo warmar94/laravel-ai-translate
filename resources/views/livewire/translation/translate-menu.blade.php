@@ -45,9 +45,9 @@
                     wire:model="manualUrls"
                     rows="6"
                     class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm text-black"
-                    placeholder="https://licenseplate.ae/upload-plates
-https://licenseplate.ae/contact
-https://licenseplate.ae/about"
+                    placeholder="https://mywebsite.com/team
+https://mywebsite.com/contact
+https://mywebsite.com/about"
                 ></textarea>
             </div>
             
@@ -60,9 +60,9 @@ https://licenseplate.ae/about"
                     wire:model="apiEndpoints"
                     rows="6"
                     class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm text-black"
-                    placeholder="https://licenseplate.ae/api/sitemaps/plate
-https://licenseplate.ae/api/sitemaps/articles
-https://licenseplate.ae/api/sitemaps/articles"
+                    placeholder="https://mywebsite.com/api/products
+https://mywebsite.com/api/blogposts
+https://mywebsite.com/api/other"
                 ></textarea>
                 <p class="text-xs text-gray-500 mt-1">
                     Format: <code>url</code> or <code>name|url</code>

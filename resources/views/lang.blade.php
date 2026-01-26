@@ -20,4 +20,4 @@
     @endif
 @endforeach
 
-<link rel="shortcut icon" type="image/x-icon" href="https://licenseplate.ae/assets/images/logo/logo-dark.webp">
+<link rel="shortcut icon" type="image/x-icon" href="https://mywebsite.com.ae/assets/images/logo.webp">
