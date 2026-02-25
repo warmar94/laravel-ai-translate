@@ -48,11 +48,11 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 
 ## ⚙️ Requirements
 
-- PHP 8.1+
-- Laravel 11+
+- PHP 8.2+
+- Laravel 11+ / 12+
 - OpenAI API Key
 - Queue worker (Redis recommended, Database queue supported)
-- Livewire 3.x
+- Livewire 3.x / 4.x
 
 
 ## 📦 Installation
@@ -100,7 +100,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
 //Declare the middleware
-use App\Http\Middleware\LanguageMiddleware;
+use App\Http\Middleware\Translate\LanguageMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -146,7 +146,7 @@ The package uses globally autoloaded helper functions instead of `View::share`. 
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Helpers/GlobalHelper.php"
+            "app/Helpers/Translate/TranslationHelper.php"
         ]
     }
 }
@@ -228,7 +228,7 @@ Copy the following files to your Laravel application:
 - `app/Providers/Translate/TranslationServiceProvider.php`
 
 **Helpers:**
-- `app/Helpers/GlobalHelper.php` (contains translation helper functions)
+- `app/Helpers/Translate/TranslationHelper.php` (contains translation helper functions)
 
 **Services:**
 - `app/Services/Translate/StringExtractor.php`
@@ -240,7 +240,7 @@ Copy the following files to your Laravel application:
 - `app/Jobs/Translate/TranslateStringBatchJob.php`
 
 **Middleware:**
-- `app/Http/Middleware/LanguageMiddleware.php`
+- `app/Http/Middleware/Translate/LanguageMiddleware.php`
 
 **Livewire Components:**
 - `app/Livewire/Translate/TranslateMenu.php`
@@ -267,11 +267,13 @@ your-laravel-app/
 │
 ├── app/
 │   ├── Helpers/
-│   │   └── GlobalHelper.php                       # Global helper functions (langCode, isRtl, etc.)
+│   │   └── Translate/
+│   │       └── TranslationHelper.php              # Global helper functions (langCode, isRtl, etc.)
 │   │
 │   ├── Http/
 │   │   └── Middleware/
-│   │       └── LanguageMiddleware.php              # Handles language detection and routing
+│   │       └── Translate/
+│   │           └── LanguageMiddleware.php          # Handles language detection and routing
 │   │
 │   ├── Jobs/
 │   │   └── Translate/
@@ -316,31 +318,49 @@ your-laravel-app/
 
 ### The `langRoute()` Helper
 
-The system includes a powerful `langRoute()` helper that automatically creates routes for all configured languages. Add this to your `routes/web.php`:
+The system includes a powerful `langRoute()` helper that automatically creates routes for all configured languages. Copy this into your `routes/web.php`:
 
 ```php
 /**
  * Language Route Helper
  * Creates both non-prefixed (English) and language-prefixed routes
  * Example: /about and /ar/about
+ *
+ * IMPORTANT: Always pass middleware as the 6th parameter — do NOT chain
+ * ->middleware() on the return value, as that only applies to the
+ * English route. The $middleware parameter applies to ALL language routes.
  */
-function langRoute($method, $path, $action, $name = null, $where = []) {
+function langRoute($method, $path, $action, $name = null, $where = [], $middleware = []) {
     $allowedLangs = array_keys(config('translation.languages'));
+    $allMiddleware = array_merge(['language'], (array) $middleware);
     
     // 1. Main route (no language prefix - English)
-    $mainRoute = Route::$method($path, $action)->middleware('language');
+    $mainRoute = Route::$method($path, $action)->middleware($allMiddleware);
     if ($name) $mainRoute->name($name);
     if (!empty($where)) $mainRoute->where($where);
     
     // 2. Prefixed routes for each language
     foreach ($allowedLangs as $lang) {
-        $langRoute = Route::$method('/' . $lang . $path, $action)->middleware('language');
+        $langRoute = Route::$method('/' . $lang . $path, $action)->middleware($allMiddleware);
         if ($name) $langRoute->name($lang . '.' . $name);
         if (!empty($where)) $langRoute->where($where);
     }
     
     return $mainRoute;
 }
+```
+
+### Function Signature
+
+```php
+langRoute(
+    string $method,       // HTTP method: 'get', 'post', 'put', 'delete', etc.
+    string $path,         // URL path: '/about', '/products/{slug}'
+    mixed  $action,       // Controller or Livewire class
+    ?string $name,        // Route name (optional)
+    array  $where,        // Where constraints (optional): ['id' => '[0-9]+']
+    array  $middleware     // Additional middleware (optional): ['auth', 'verified']
+): \Illuminate\Routing\Route
 ```
 
 ### Using `langRoute()` in Your Routes
@@ -365,7 +385,7 @@ This **automatically creates**:
 ### Route Examples
 
 ```php
-// Simple routes
+// Simple routes (public, no extra middleware)
 langRoute('get', '/', HomePage::class, 'home');
 langRoute('get', '/contact', Contact::class, 'contact');
 langRoute('get', '/about', About::class, 'about');
@@ -374,16 +394,33 @@ langRoute('get', '/about', About::class, 'about');
 langRoute('get', '/products/{slug}', ProductShow::class, 'products.show');
 langRoute('get', '/blog/{category}/{slug}', BlogPost::class, 'blog.post');
 
-// Routes with middleware
-langRoute('get', '/dashboard', Dashboard::class, 'dashboard')
-    ->middleware(['auth', 'verified']);
+// Routes with middleware (passed as 6th parameter)
+langRoute('get', '/dashboard', Dashboard::class, 'dashboard', [], ['auth', 'verified']);
+langRoute('get', '/profile', Profile::class, 'profile', [], ['auth']);
+langRoute('get', '/admin', Admin::class, 'admin', [], ['admin']);
 
-// Routes with where constraints
+// Routes with where constraints (5th parameter)
 langRoute('get', '/user/{id}', UserProfile::class, 'user.profile', ['id' => '[0-9]+']);
+
+// Routes with BOTH where constraints AND middleware
+langRoute('get', '/orders/{orderNumber}', OrderDetail::class, 'orders.show', [], ['auth', 'verified']);
 
 // POST routes work too
 langRoute('post', '/contact', ContactSubmit::class, 'contact.submit');
 ```
+
+> ⚠️ **IMPORTANT — Middleware Security**
+>
+> Never chain `->middleware()` on `langRoute()`. The return value is only the English (non-prefixed) route — all language-prefixed routes (`/ar/...`, `/de/...`, etc.) are created inside the function and never returned. Chaining middleware only protects the English route while leaving every other language completely unprotected.
+>
+> ```php
+> // ❌ WRONG — only English route gets auth, /ar/dashboard is unprotected!
+> langRoute('get', '/dashboard', Dashboard::class, 'dashboard')
+>     ->middleware(['auth']);
+>
+> // ✅ CORRECT — all language routes get auth
+> langRoute('get', '/dashboard', Dashboard::class, 'dashboard', [], ['auth']);
+> ```
 
 ### Generating Language-Specific URLs
 
@@ -421,7 +458,7 @@ Already included in your installation:
 
 ```php
 <?php
-namespace App\Http\Middleware;
+namespace App\Http\Middleware\Translate;
 
 use Closure;
 use Illuminate\Http\Request;
@@ -618,7 +655,7 @@ return [
     'target_locales' => ['ar'],
     
     // RTL languages
-    'rtl_languages' => ['ar'],
+    'rtl_languages' => ['ar', 'he'],
     
     // Language file paths
     'language_files' => [
@@ -682,7 +719,7 @@ To add a new language:
 2. **Add RTL support if needed:**
 
 ```php
-'rtl_languages' => ['ar', 'ur', 'he'],
+'rtl_languages' => ['ar', 'he'],
 ```
 
 3. **Create empty JSON files:**
@@ -706,22 +743,25 @@ use App\Livewire\Pages\About;
 use App\Livewire\Pages\Contact;
 use App\Livewire\Products\ProductIndex;
 use App\Livewire\Products\ProductShow;
+use App\Livewire\User\Dashboard;
+use App\Livewire\User\Profile;
 
 /**
  * Language Route Helper
  * Copy this function into your routes/web.php file
  */
-function langRoute($method, $path, $action, $name = null, $where = []) {
+function langRoute($method, $path, $action, $name = null, $where = [], $middleware = []) {
     $allowedLangs = array_keys(config('translation.languages'));
+    $allMiddleware = array_merge(['language'], (array) $middleware);
     
     // Main route (no prefix - English)
-    $mainRoute = Route::$method($path, $action)->middleware('language');
+    $mainRoute = Route::$method($path, $action)->middleware($allMiddleware);
     if ($name) $mainRoute->name($name);
     if (!empty($where)) $mainRoute->where($where);
     
     // Language-prefixed routes
     foreach ($allowedLangs as $lang) {
-        $langRoute = Route::$method('/' . $lang . $path, $action)->middleware('language');
+        $langRoute = Route::$method('/' . $lang . $path, $action)->middleware($allMiddleware);
         if ($name) $langRoute->name($lang . '.' . $name);
         if (!empty($where)) $langRoute->where($where);
     }
@@ -731,11 +771,10 @@ function langRoute($method, $path, $action, $name = null, $where = []) {
 
 /*
 |--------------------------------------------------------------------------
-| Your Application Routes
+| Public Routes (no auth required)
 |--------------------------------------------------------------------------
 */
 
-// Basic pages
 langRoute('get', '/', Home::class, 'home');
 langRoute('get', '/about', About::class, 'about');
 langRoute('get', '/contact', Contact::class, 'contact');
@@ -744,14 +783,24 @@ langRoute('get', '/contact', Contact::class, 'contact');
 langRoute('get', '/products', ProductIndex::class, 'products.index');
 langRoute('get', '/products/{slug}', ProductShow::class, 'products.show');
 
-// Authenticated routes
-langRoute('get', '/dashboard', Dashboard::class, 'dashboard')
-    ->middleware(['auth']);
+/*
+|--------------------------------------------------------------------------
+| Authenticated Routes
+|--------------------------------------------------------------------------
+| Middleware is passed as the 6th parameter so it applies to ALL
+| language-prefixed routes, not just the English route.
+|--------------------------------------------------------------------------
+*/
 
-langRoute('get', '/profile', Profile::class, 'profile')
-    ->middleware(['auth', 'verified']);
+langRoute('get', '/dashboard', Dashboard::class, 'dashboard', [], ['auth']);
+langRoute('get', '/profile', Profile::class, 'profile', [], ['auth', 'verified']);
 
-// POST routes
+/*
+|--------------------------------------------------------------------------
+| POST Routes
+|--------------------------------------------------------------------------
+*/
+
 langRoute('post', '/contact', ContactSubmit::class, 'contact.submit');
 langRoute('post', '/logout', Logout::class, 'logout');
 ```
@@ -770,6 +819,10 @@ GET  /es/about                 → es.about
 GET  /products/{slug}          → products.show
 GET  /ar/products/{slug}       → ar.products.show
 GET  /es/products/{slug}       → es.products.show
+
+GET  /dashboard                → dashboard        (language, auth)
+GET  /ar/dashboard             → ar.dashboard     (language, auth)
+GET  /es/dashboard             → es.dashboard     (language, auth)
 ```
 
 ## 🚀 Usage
@@ -1107,6 +1160,21 @@ Adjust based on your OpenAI tier:
    >>> config('translation.languages')
    ```
 
+### Middleware Not Applying to Language-Prefixed Routes
+
+If authenticated routes are accessible without login on language-prefixed URLs (e.g., `/ar/dashboard` works without auth), you are chaining middleware instead of passing it as a parameter:
+
+```php
+// ❌ WRONG — middleware only applies to English route
+langRoute('get', '/dashboard', Dashboard::class, 'dashboard')
+    ->middleware(['auth']);
+
+// ✅ CORRECT — middleware applies to ALL language routes
+langRoute('get', '/dashboard', Dashboard::class, 'dashboard', [], ['auth']);
+```
+
+See [Routing System](#routing-system) for details.
+
 ## 📖 API Reference
 
 ### StringExtractor Service
@@ -1224,6 +1292,6 @@ Built with ❤️ using:
 
 ## 📞 Support
 For issues, questions, or contributions:
-- Open an issue on GitHub
+- Open an issue on GitHub.
 
 **Note:** Remember to never commit your `.env` file or expose your OpenAI API key publicly.
