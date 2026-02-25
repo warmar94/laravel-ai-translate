@@ -1,5 +1,7 @@
 # Laravel AI Translation System
 
+**Docs:** https://warmardev.com/docs/laravel-translate.html
+
 A **complete multilingual framework** for Laravel applications. This isn't just a translation tool - it's a full-featured localization system with AI-powered translations, automatic routing, SEO optimization, and RTL support out of the box.
 
 **Built on top of Laravel's default translation system, but adds:**
