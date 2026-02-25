@@ -12,7 +12,9 @@ use App\Jobs\Translate\ScanUrlForStringsJob;
 use App\Jobs\Translate\TranslateStringBatchJob;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Layout;
 
+#[Layout('layouts.translate')]
 #[Title('Translation Manager')]
 class TranslateMenu extends Component
 {
