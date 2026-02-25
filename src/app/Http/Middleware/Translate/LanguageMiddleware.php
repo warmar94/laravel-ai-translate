@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Middleware;
+namespace App\Http\Middleware\Translate;
 
 use Closure;
 use Illuminate\Http\Request;

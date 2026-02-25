@@ -4,7 +4,7 @@
 use Illuminate\Support\Facades\Route;
 
 // Declare Livewire Translator class here
-use App\Livewire\Translation\TranslateMenu;
+use App\Livewire\Translate\TranslateMenu;
 
 /*
 |--------------------------------------------------------------------------

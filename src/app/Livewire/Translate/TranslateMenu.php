@@ -1,14 +1,14 @@
 <?php
 // app/Livewire/Translation/TranslateMenu.php
 
-namespace App\Livewire\Translation;
+namespace App\Livewire\Translate;
 
 use Livewire\Component;
-use App\Services\Translation\URLCollector;
-use App\Services\Translation\StringExtractor;
-use App\Services\Translation\AITranslator;
-use App\Jobs\ScanUrlForStringsJob;
-use App\Jobs\TranslateStringBatchJob;
+use App\Services\Translate\URLCollector;
+use App\Services\Translate\StringExtractor;
+use App\Services\Translate\AITranslator;
+use App\Jobs\Translate\ScanUrlForStringsJob;
+use App\Jobs\Translate\TranslateStringBatchJob;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -374,7 +374,7 @@ class TranslateMenu extends Component
     
     public function render()
     {
-        return view('livewire.translation.translate-menu')
+        return view('livewire.translate.translate-menu')
             ->layoutData([
                 'title' => 'Translate Menu',
                 'description' => 'Translation and localization tools will be available here soon.',

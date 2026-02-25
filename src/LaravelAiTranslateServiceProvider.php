@@ -10,7 +10,7 @@ class LaravelAiTranslateServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            // Register your new install command
+            // Register install command
             $this->commands([
                 InstallAiTranslateCommand::class,
             ]);
@@ -22,15 +22,17 @@ class LaravelAiTranslateServiceProvider extends ServiceProvider
             ], 'ai-translate-migrations');
         }
 
-        // Existing publishes (user can run vendor:publish manually)
+        // App files (services, jobs, livewire, middleware, providers, helpers)
         $this->publishes([
             __DIR__ . '/app' => app_path(),
         ], 'ai-translate-app');
 
+        // Config
         $this->publishes([
             __DIR__ . '/config/translation.php' => config_path('translation.php'),
         ], 'ai-translate-config');
 
+        // Views
         $this->publishes([
             __DIR__ . '/resources/views' => resource_path('views'),
         ], 'ai-translate-views');

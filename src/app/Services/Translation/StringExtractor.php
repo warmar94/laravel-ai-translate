@@ -1,14 +1,15 @@
 <?php
 // app/Services/Translation/StringExtractor.php
 
-namespace App\Services\Translation;
+namespace App\Services\Translate;
 
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 
 class StringExtractor
 {
+    public static bool $collectionMode = false;
+
     protected array $languageFiles;
     protected $logProcess = false;
     
@@ -42,8 +43,8 @@ class StringExtractor
                 Log::info("Parsed URL to path: {$path}");
             }
             
-            // Enable collection mode temporarily
-            Config::set('app.translation_collection_mode', true);
+            // Enable collection mode temporarily (runtime only)
+            self::$collectionMode = true;
             
             if ($this->logProcess) {
                 Log::info("Collection mode enabled");
@@ -65,13 +66,6 @@ class StringExtractor
             
             $request = \Illuminate\Http\Request::create($path, 'GET');
             $response = app()->handle($request);
-            
-            // Disable collection mode
-            Config::set('app.translation_collection_mode', false);
-            
-            if ($this->logProcess) {
-                Log::info("Collection mode disabled");
-            }
             
             $html = $response->getContent();
             
@@ -102,6 +96,13 @@ class StringExtractor
                 'trace' => $e->getTraceAsString()
             ]);
             return [];
+        } finally {
+            // Always disable collection mode, even if an exception occurred
+            self::$collectionMode = false;
+            
+            if ($this->logProcess) {
+                Log::info("Collection mode disabled");
+            }
         }
     }
     

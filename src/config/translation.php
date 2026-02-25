@@ -9,16 +9,7 @@ return [
     |--------------------------------------------------------------------------
     | Enable detailed logging for debugging. When false, only errors are logged.
     */
-    'log_process' => env('TRANSLATION_LOG_PROCESS', false),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Translation mode
-    |--------------------------------------------------------------------------
-    | You can turn the translation mode on/off from env. The system will stop
-    | putting translate comments into your blade files.
-    */
-    'translation_collection_mode' => env('TRANSLATION_COLLECTION_MODE', false),
+    'log_process' => false,
     
     /*
     |--------------------------------------------------------------------------
@@ -92,7 +83,7 @@ return [
     |--------------------------------------------------------------------------
     */
     'urls' => [
-        'delay_between_requests' => env('TRANSLATION_URL_DELAY', 1), // seconds
+        'delay_between_requests' => 1, // seconds
         'batch_size' => 50,
         'timeout' => 20,
     ],
@@ -104,7 +95,7 @@ return [
     */
     'extraction' => [
         'scan_internal' => true, // Use internal Laravel requests
-        'clear_cache' => false,   // Clear view cache before scanning (BUGGED)
+        'clear_cache' => true,   // Clear view cache before scanning
     ],
     
     /*

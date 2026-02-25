@@ -1,14 +1,14 @@
 <?php
 // app/Jobs/TranslateStringBatchJob.php
 
-namespace App\Jobs;
+namespace App\Jobs\Translate;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use App\Services\Translation\AITranslator;
+use App\Services\Translate\AITranslator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 

@@ -10,7 +10,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - ✅ Real-time translation dashboard
 - ✅ Complete SEO implementation (hreflang, canonical URLs)
 - ✅ RTL language support
-- ✅ Global view helpers for easy integration
+- ✅ Global helper functions for easy integration
 
 ## 🌟 Features
 
@@ -29,7 +29,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - 📝 **SEO-Optimized**: Auto-generated hreflang tags, canonical URLs, and x-default handling
 - 🔄 **Language Switcher**: Built-in helpers for creating language selection menus
 - ↔️ **RTL Support**: Full right-to-left language support with automatic detection
-- 🎨 **View Helpers**: Global `$langUrl()`, `$isRtl`, `$isRoute()`, and `$langCode` variables
+- 🎨 **Global Helper Functions**: `langUrl()`, `isRtl()`, `isRoute()`, `langCode()`, and `isCollectionMode()` available everywhere
 
 ## 📋 Table of Contents
 
@@ -73,9 +73,24 @@ composer require warmar/laravel-ai-translate
 php artisan ai-translate:install
 ```
 
-### 4. Register Language Middleware
+### 4. Register the Service Provider
 
-Add the language middleware to `boostrap/app.php`:
+Add the `TranslationServiceProvider` to your `bootstrap/providers.php`:
+
+```php
+<?php
+
+return [
+    App\Providers\AppServiceProvider::class,
+    App\Providers\Translate\TranslationServiceProvider::class,
+];
+```
+
+> **Note:** The package ships with its own `TranslationServiceProvider` that registers the `@__t()` Blade directive and all translation functionality. You do **not** need to modify your `AppServiceProvider`.
+
+### 5. Register Language Middleware
+
+Add the language middleware to `bootstrap/app.php`:
 
 ```php
 <?php
@@ -105,101 +120,55 @@ return Application::configure(basePath: dirname(__DIR__))
 
 ```
 
-### 5. Configure Environment
+### 6. Configure Environment
 
-Add your OpenAI API key and settings to `.env`:
+Add your OpenAI API key to `.env`:
 
 ```env
-OPENAI_API_KEY=
-TRANSLATION_COLLECTION_MODE=false
+OPENAI_API_KEY=your-api-key-here
 OPENAI_MODEL=gpt-4o-mini
-TRANSLATION_URL_DELAY=1
-TRANSLATION_LOG_PROCESS=false
 ```
 
-### 6. Edit AppServiceProvider's boot() 
-Add our custom code into the Service Provider
+That's it for `.env`. All other translation settings are managed directly in `config/translation.php` (see [Configuration](#configuration)).
 
-```php
-<?php
+> **Note:** Collection mode, URL delay, and logging are configured in `config/translation.php` — not in `.env`. Collection mode is handled automatically at runtime by the string extraction system and requires no manual toggling.
 
-namespace App\Providers;
+### 7. Register Global Helper Functions
 
-use Illuminate\Support\ServiceProvider;
+The package uses globally autoloaded helper functions instead of `View::share`. Add the helper file to your `composer.json` autoload section:
 
-// Declare this on top
-use Illuminate\Support\Facades\Blade;
-
-class AppServiceProvider extends ServiceProvider
+```json
 {
-    /**
-     * Register any application services.
-     */
-    public function register(): void
-    {
-        //
-    }
-
-    /**
-     * Bootstrap any application services.
-     */
-    public function boot(): void
-    {
-
-        // Translation collection mode - Blade directive
-        Blade::directive('__t', function ($expression) {
-            if (config('translation.translation_collection_mode', false)) {
-                return "<?php echo '<!--T_START:' . htmlspecialchars(__({$expression}), ENT_QUOTES, 'UTF-8') . ':T_END-->' . __({$expression}); ?>";
-            }
-            
-            return "<?php echo __({$expression}); ?>";
-        });
-
-        // ---------------------------
-        // Frontend global language variables
-        // ---------------------------
-        View::share([
-            // Current language code
-            'langCode' => app()->getLocale(),
-            
-            // RTL detection
-            'isRtl' => in_array(app()->getLocale(), config('translation.rtl_languages', [])),
-            
-            // Simple langUrl helper for Blade
-            'langUrl' => function ($routeName, $params = []) {
-                $lang = app()->getLocale();
-                if ($lang === 'en') {
-                    return route($routeName, $params);
-                }
-                return route($lang . '.' . $routeName, $params);
-            },
-            
-            // Helper to check if current route matches (works with language prefixes)
-            'isRoute' => function ($routeName) {
-                $currentRouteName = Route::currentRouteName();
-                
-                // Check if current route matches exactly
-                if ($currentRouteName === $routeName) {
-                    return true;
-                }
-                
-                // Check if current route matches with language prefix (ar.home, en.home, etc)
-                $allowedLangs = array_keys(config('translation.languages'));
-                foreach ($allowedLangs as $lang) {
-                    if ($currentRouteName === $lang . '.' . $routeName) {
-                        return true;
-                    }
-                }
-                
-                return false;
-            },
-        ]);
-
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+        },
+        "files": [
+            "app/Helpers/GlobalHelper.php"
+        ]
     }
 }
 ```
 
-### 7. Configure Queue Workers
+Then regenerate the autoload files:
+
+```bash
+composer dump-autoload
+```
+
+The helper file provides these global functions for use in Blade templates, controllers, Livewire components, and anywhere else in your application:
+
+| Function | Returns | Description |
+|---|---|---|
+| `langCode()` | `string` | Current locale code (`'en'`, `'ar'`, etc.) |
+| `isRtl()` | `bool` | Whether current locale is RTL |
+| `langUrl($route, $params)` | `string` | Language-prefixed URL for a named route |
+| `isRoute($name)` | `bool` | Whether current route matches (works with language prefixes) |
+| `isCollectionMode()` | `bool` | Whether string collection is currently active |
+
+### 8. Configure Queue Workers
 
 **Development Environment:**
 
@@ -215,7 +184,7 @@ php artisan queue:work
 
 (For production, use a process manager like Supervisor)
 
-### 8. Create Required Database Tables
+### 9. Create Required Database Tables
 If you installed via Laravel Command skip this Step. Raw SQL also provided.
 
 Create a migration for the `translation_progress` table:
@@ -248,7 +217,7 @@ Run the migration:
 php artisan migrate
 ```
 
-### 9. Install Required Files
+### 10. Install Required Files
 If you installed via Laravel Command skip this Step.
 Copy the following files to your Laravel application:
 
@@ -256,29 +225,32 @@ Copy the following files to your Laravel application:
 - `config/translation.php`
 
 **Service Providers:**
-- `app/Providers/AppServiceProvider.php` (merge with existing)
+- `app/Providers/Translate/TranslationServiceProvider.php`
+
+**Helpers:**
+- `app/Helpers/GlobalHelper.php` (contains translation helper functions)
 
 **Services:**
-- `app/Services/Translation/StringExtractor.php`
-- `app/Services/Translation/URLCollector.php`
-- `app/Services/Translation/AITranslator.php`
+- `app/Services/Translate/StringExtractor.php`
+- `app/Services/Translate/URLCollector.php`
+- `app/Services/Translate/AITranslator.php`
 
 **Jobs:**
-- `app/Jobs/ScanUrlForStringsJob.php`
-- `app/Jobs/TranslateStringBatchJob.php`
+- `app/Jobs/Translate/ScanUrlForStringsJob.php`
+- `app/Jobs/Translate/TranslateStringBatchJob.php`
 
 **Middleware:**
 - `app/Http/Middleware/LanguageMiddleware.php`
 
 **Livewire Components:**
-- `app/Livewire/Translation/TranslateMenu.php`
+- `app/Livewire/Translate/TranslateMenu.php`
 - `resources/views/livewire/translation/translate-menu.blade.php`
 
 **Blade Views:**
 - `resources/views/lang.blade.php`
 
 
-### 10. Clear Cache
+### 11. Clear Cache
 
 Clear configuration and view caches:
 
@@ -294,45 +266,50 @@ php artisan config:cache
 your-laravel-app/
 │
 ├── app/
+│   ├── Helpers/
+│   │   └── GlobalHelper.php                       # Global helper functions (langCode, isRtl, etc.)
+│   │
 │   ├── Http/
 │   │   └── Middleware/
-│   │       └── LanguageMiddleware.php          # Handles language detection and routing
+│   │       └── LanguageMiddleware.php              # Handles language detection and routing
 │   │
 │   ├── Jobs/
-│   │   ├── ScanUrlForStringsJob.php            # Extracts strings from URLs
-│   │   └── TranslateStringBatchJob.php         # Translates string batches
+│   │   └── Translate/
+│   │       ├── ScanUrlForStringsJob.php            # Extracts strings from URLs
+│   │       └── TranslateStringBatchJob.php         # Translates string batches
 │   │
 │   ├── Livewire/
-│   │   └── Translation/
-│   │       └── TranslateMenu.php               # Dashboard controller
+│   │   └── Translate/
+│   │       └── TranslateMenu.php                   # Dashboard controller
 │   │
 │   ├── Providers/
-│   │   └── AppServiceProvider.php              # Registers @__t() directive
+│   │   └── Translate/
+│   │       └── TranslationServiceProvider.php      # Registers @__t() directive
 │   │
 │   └── Services/
-│       └── Translation/
-│           ├── AITranslator.php                # OpenAI API integration
-│           ├── StringExtractor.php             # String extraction logic
-│           └── URLCollector.php                # URL collection logic
+│       └── Translate/
+│           ├── AITranslator.php                    # OpenAI API integration
+│           ├── StringExtractor.php                 # String extraction logic
+│           └── URLCollector.php                    # URL collection logic
 │
 ├── config/
-│   ├── translation.php                         # Main configuration file
-│   └── urls.json                              # Generated URL list (auto-created)
+│   ├── translation.php                             # Main configuration file
+│   └── urls.json                                   # Generated URL list (auto-created)
 │
 ├── lang/
-│   ├── en.json                                # English strings (source)
-│   ├── ar.json                                # Arabic translations
-│   └── [locale].json                          # Additional languages
+│   ├── en.json                                     # English strings (source)
+│   ├── ar.json                                     # Arabic translations
+│   └── [locale].json                               # Additional languages
 │
 ├── resources/
 │   └── views/
-│       ├── lang.blade.php                     # SEO hreflang tags
+│       ├── lang.blade.php                          # SEO hreflang tags
 │       └── livewire/
 │           └── translation/
-│               └── translate-menu.blade.php    # Dashboard UI
+│               └── translate-menu.blade.php        # Dashboard UI
 │
 └── routes/
-    └── web.php                                # Route definitions with langRoute()
+    └── web.php                                     # Route definitions with langRoute()
 ```
 
 ## 🛣️ Routing System
@@ -410,14 +387,14 @@ langRoute('post', '/contact', ContactSubmit::class, 'contact.submit');
 
 ### Generating Language-Specific URLs
 
-Use the `$langUrl()` helper in your views:
+Use the `langUrl()` helper in your views:
 
 ```blade
 {{-- Generates URL for current language --}}
-<a href="{{ $langUrl('about') }}">About Us</a>
+<a href="{{ langUrl('about') }}">About Us</a>
 
 {{-- With parameters --}}
-<a href="{{ $langUrl('products.show', ['slug' => $product->slug]) }}">
+<a href="{{ langUrl('products.show', ['slug' => $product->slug]) }}">
     {{ $product->name }}
 </a>
 
@@ -493,54 +470,36 @@ class LanguageMiddleware
 
 ### Registering the Middleware
 
-Add to `app/Http/Kernel.php`:
-
-```php
-protected $middlewareAliases = [
-    // ... other middleware
-    'language' => \App\Http\Middleware\LanguageMiddleware::class,
-];
-```
-
-Or add to web middleware group for automatic application:
-
-```php
-protected $middlewareGroups = [
-    'web' => [
-        // ... other middleware
-        \App\Http\Middleware\LanguageMiddleware::class,
-    ],
-];
-```
+Add to `bootstrap/app.php` (see [Installation Step 5](#5-register-language-middleware)).
 
 ## 🎨 View Helpers
 
-The system provides several global view helpers via `AppServiceProvider`:
+The system provides global helper functions via Composer autoloading. These are available everywhere — Blade templates, controllers, Livewire components, middleware, and more.
 
 ### Available Helpers
 
 ```blade
 {{-- Current language code --}}
-{{ $langCode }} {{-- Output: 'en', 'ar', 'es', etc. --}}
+{{ langCode() }} {{-- Output: 'en', 'ar', 'es', etc. --}}
 
 {{-- RTL detection --}}
-@if($isRtl)
+@if(isRtl())
     <div dir="rtl" class="text-right">
         Arabic or Hebrew content
     </div>
 @endif
 
 {{-- Generate language-specific URLs --}}
-<a href="{{ $langUrl('about') }}">About</a>
-<a href="{{ $langUrl('products.show', ['id' => 5]) }}">Product</a>
+<a href="{{ langUrl('about') }}">About</a>
+<a href="{{ langUrl('products.show', ['id' => 5]) }}">Product</a>
 
 {{-- Check current route --}}
-@if($isRoute('about'))
+@if(isRoute('about'))
     <li class="active">About</li>
 @endif
 
 {{-- Works with language prefixes automatically --}}
-@if($isRoute('products.show'))
+@if(isRoute('products.show'))
     <span class="badge">Current</span>
 @endif
 ```
@@ -550,24 +509,20 @@ The system provides several global view helpers via `AppServiceProvider`:
 Here's how to use the helpers in a navigation header:
 
 ```blade
-@php
-    $isRtl = in_array(app()->getLocale(), config('translation.rtl_languages', []));
-@endphp
-
 <header>
-    <nav class="{{ $isRtl ? 'flex-row-reverse' : '' }}">
-        <a href="{{ $langUrl('home') }}" 
-           class="{{ $isRoute('home') ? 'active' : '' }}">
+    <nav class="{{ isRtl() ? 'flex-row-reverse' : '' }}">
+        <a href="{{ langUrl('home') }}" 
+           class="{{ isRoute('home') ? 'active' : '' }}">
             @__t('Home')
         </a>
         
-        <a href="{{ $langUrl('about') }}" 
-           class="{{ $isRoute('about') ? 'active' : '' }}">
+        <a href="{{ langUrl('about') }}" 
+           class="{{ isRoute('about') ? 'active' : '' }}">
             @__t('About')
         </a>
         
-        <a href="{{ $langUrl('contact') }}" 
-           class="{{ $isRoute('contact') ? 'active' : '' }}">
+        <a href="{{ langUrl('contact') }}" 
+           class="{{ isRoute('contact') ? 'active' : '' }}">
             @__t('Contact')
         </a>
     </nav>
@@ -603,7 +558,7 @@ Create a language switcher menu using the helpers:
         
         <a href="{{ $switchUrl }}" 
            class="{{ $isActive ? 'active' : '' }}">
-            {{ config('translation.language_names.' . $langCode . '.' . $locale) }}
+            {{ config('translation.language_names.' . langCode() . '.' . $locale) }}
         </a>
     @endforeach
 </div>
@@ -615,12 +570,12 @@ The helpers work seamlessly with Livewire:
 
 ```blade
 <div>
-    <a href="{{ $langUrl('profile') }}" wire:navigate>
+    <a href="{{ langUrl('profile') }}" wire:navigate>
         @__t('My Profile')
     </a>
     
-    <button wire:click="$set('locale', '{{ $langCode }}')" 
-            class="{{ $isRtl ? 'mr-auto' : 'ml-auto' }}">
+    <button wire:click="$set('locale', '{{ langCode() }}')" 
+            class="{{ isRtl() ? 'mr-auto' : 'ml-auto' }}">
         @__t('Save Changes')
     </button>
 </div>
@@ -635,10 +590,7 @@ The `config/translation.php` file contains all system settings:
 ```php
 return [
     // Enable detailed logging for debugging
-    'log_process' => env('TRANSLATION_LOG_PROCESS', false),
-    
-    // Enable collection mode (wraps strings with HTML comments)
-    'translation_collection_mode' => env('TRANSLATION_COLLECTION_MODE', false),
+    'log_process' => false,
     
     // Source language (strings are extracted to this language first)
     'source_locale' => 'en',
@@ -676,9 +628,15 @@ return [
     
     // URL scanning settings
     'urls' => [
-        'delay_between_requests' => env('TRANSLATION_URL_DELAY', 1),
+        'delay_between_requests' => 1, // seconds
         'batch_size' => 50,
         'timeout' => 20,
+    ],
+    
+    // String extraction settings
+    'extraction' => [
+        'scan_internal' => true,
+        'clear_cache' => true,
     ],
     
     // AI translation settings
@@ -687,12 +645,15 @@ return [
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
         'api_key' => env('OPENAI_API_KEY'),
         'batch_size' => 20,
+        'concurrent_jobs' => 5,
         'rate_limit_per_minute' => 300,
         'max_retries' => 3,
-        'system_prompt' => 'You are a professional translator. Translate the following text to {language}. Return ONLY the translated text with no explanations, greetings, or additional commentary.',
+        'system_prompt' => 'You are a professional translator. Translate the following text to {language}. Return ONLY the translated text with no explanations, greetings, or additional commentary. Preserve any HTML tags, placeholders like :name, and formatting.',
     ],
 ];
 ```
+
+> **Note:** Only `OPENAI_API_KEY` and `OPENAI_MODEL` use `.env` variables. All other settings like `log_process`, `delay_between_requests`, and `batch_size` are configured directly in this file. Collection mode is handled automatically at runtime — there is no config entry for it.
 
 ### Adding New Languages
 
@@ -858,25 +819,13 @@ In the dashboard:
 
 ### Step 4: Collect Strings
 
-1. **Enable Collection Mode** in `.env`:
-   ```env
-   TRANSLATION_COLLECTION_MODE=true
-   ```
+1. Click **"Collect Strings"** in the dashboard
 
-2. **Clear cache:**
-   ```bash
-   php artisan view:clear
-   php artisan config:clear
-   ```
+2. Monitor the real-time progress bar
 
-3. Click **"Collect Strings"** in the dashboard
+3. That's it! Collection mode is handled automatically at runtime — no need to toggle any `.env` or config values.
 
-4. Monitor the real-time progress bar
-
-5. **Disable Collection Mode** once complete:
-   ```env
-   TRANSLATION_COLLECTION_MODE=false
-   ```
+> **How it works:** When you click "Collect Strings", the system dispatches queue jobs that internally enable collection mode only for the duration of each scan request. Normal user traffic is never affected. See [How It Works](#how-it-works) for details.
 
 ### Step 5: Translate All Keys
 
@@ -894,7 +843,7 @@ In the dashboard:
 
 The system uses a custom Blade directive that operates in two modes:
 
-#### Collection Mode (TRANSLATION_COLLECTION_MODE=true)
+#### Collection Mode (automatic, during string scanning)
 
 ```php
 @__t('Hello World')
@@ -907,7 +856,7 @@ Outputs:
 
 The HTML comments act as markers that the scanner can detect and extract.
 
-#### Translation Mode (TRANSLATION_COLLECTION_MODE=false)
+#### Normal Mode (default, during regular requests)
 
 ```php
 @__t('Hello World')
@@ -920,13 +869,55 @@ Outputs (if locale is 'ar'):
 
 Simply calls Laravel's `__()` helper to fetch the translated string.
 
+#### How Collection Mode Works
+
+Collection mode is **not** a global toggle. It's a runtime-only static property on the `StringExtractor` class:
+
+```php
+// StringExtractor.php
+public static bool $collectionMode = false;
+```
+
+When the `StringExtractor` scans a URL, it temporarily enables collection mode for that specific internal request only:
+
+```php
+try {
+    self::$collectionMode = true;    // Enable for this scan
+    $response = app()->handle($request);  // Render the page
+    // ... extract markers ...
+} finally {
+    self::$collectionMode = false;   // Always disable after
+}
+```
+
+The `@__t()` Blade directive checks this property at runtime via the `isCollectionMode()` helper:
+
+```php
+Blade::directive('__t', function ($expression) {
+    return "<?php if(isCollectionMode()): ?>" .
+        "<?php echo '<!--T_START:' ... :T_END-->' . __({$expression}); ?>" .
+        "<?php else: ?>" .
+        "<?php echo __({$expression}); ?>" .
+        "<?php endif; ?>";
+});
+```
+
+This means:
+- **Normal user requests** → `isCollectionMode()` returns `false` → no HTML comment markers, zero overhead
+- **String extraction jobs** → `isCollectionMode()` returns `true` only during the scan → markers are injected → then immediately disabled
+- **No `.env` or config toggling needed** → fully automatic
+- **Cache-safe** → works correctly even with cached Blade views because the check happens at runtime, not compile time
+
 ### String Collection Process
 
 1. **ScanUrlForStringsJob** dispatched for each URL
-2. Job makes an internal Laravel request to the URL
-3. HTML response is scanned for `<!--T_START:...:T_END-->` markers
-4. Unique strings are extracted and saved to `lang/en.json`
-5. Progress tracking is updated in the database
+2. `StringExtractor` enables collection mode via static property
+3. Job makes an internal Laravel request to the URL
+4. The `@__t()` directive detects collection mode and injects HTML comment markers
+5. HTML response is scanned for `<!--T_START:...:T_END-->` markers
+6. Collection mode is disabled in a `finally` block (guaranteed cleanup)
+7. Unique strings are extracted and saved to `lang/en.json`
+8. Progress tracking is updated in the database
 
 ### Translation Process
 
@@ -1001,28 +992,6 @@ $progress = DB::table('translation_progress')
     ->first();
 ```
 
-### View Helpers
-
-The `AppServiceProvider` provides global view variables:
-
-```blade
-{{-- Current language code --}}
-{{ $langCode }} {{-- 'en', 'ar', etc. --}}
-
-{{-- RTL detection --}}
-@if($isRtl)
-    <div dir="rtl">...</div>
-@endif
-
-{{-- Generate language-specific URLs --}}
-<a href="{{ $langUrl('about') }}">About</a>
-
-{{-- Check current route --}}
-@if($isRoute('about'))
-    <li class="active">About</li>
-@endif
-```
-
 ### API Endpoints for Dynamic URLs
 
 If you have dynamic content (products, articles, etc.), create API endpoints:
@@ -1067,29 +1036,33 @@ Adjust based on your OpenAI tier:
 
 ### Strings Not Being Collected
 
-1. **Verify collection mode is enabled:**
-   ```bash
-   php artisan config:clear
-   ```
-   Check `.env`:
-   ```env
-   TRANSLATION_COLLECTION_MODE=true
-   ```
-
-2. **Clear view cache:**
+1. **Clear view cache** (important — stale compiled views won't have the runtime check):
    ```bash
    php artisan view:clear
    ```
 
-3. **Enable debug logging:**
-   ```env
-   TRANSLATION_LOG_PROCESS=true
+2. **Enable debug logging** in `config/translation.php`:
+   ```php
+   'log_process' => true,
    ```
-   Check `storage/logs/laravel.log`
+   Then check `storage/logs/laravel.log` for detailed extraction logs.
 
-4. **Verify routes are accessible:**
+3. **Verify routes are accessible:**
    ```bash
    curl http://127.0.0.1:8000/home
+   ```
+
+4. **Verify the service provider is registered** in `bootstrap/providers.php`:
+   ```php
+   App\Providers\Translate\TranslationServiceProvider::class,
+   ```
+
+5. **Verify helper functions are autoloaded:**
+   ```bash
+   composer dump-autoload
+   php artisan tinker
+   >>> isCollectionMode()
+   # Should return false
    ```
 
 ### Translations Not Working
@@ -1139,7 +1112,7 @@ Adjust based on your OpenAI tier:
 ### StringExtractor Service
 
 ```php
-use App\Services\Translation\StringExtractor;
+use App\Services\Translate\StringExtractor;
 
 $extractor = new StringExtractor();
 
@@ -1151,12 +1124,15 @@ $newCount = $extractor->saveToLanguageFile($keys, 'en');
 
 // Get all keys from a language file
 $allKeys = $extractor->getAllKeys('en');
+
+// Check if collection mode is active
+$isActive = StringExtractor::$collectionMode;
 ```
 
 ### AITranslator Service
 
 ```php
-use App\Services\Translation\AITranslator;
+use App\Services\Translate\AITranslator;
 
 $translator = new AITranslator();
 
@@ -1178,7 +1154,7 @@ if ($translator->isConfigured()) {
 ### URLCollector Service
 
 ```php
-use App\Services\Translation\URLCollector;
+use App\Services\Translate\URLCollector;
 
 $collector = new URLCollector();
 
@@ -1198,6 +1174,31 @@ $total = $collector->saveToConfig();
 
 // Load from config
 $urls = $collector->loadFromConfig();
+```
+
+### Global Helper Functions
+
+```php
+// Get current locale
+$locale = langCode(); // 'en', 'ar', etc.
+
+// Check RTL
+if (isRtl()) {
+    // Apply RTL styles
+}
+
+// Generate language-aware URL
+$url = langUrl('products.show', ['slug' => 'example']);
+
+// Check current route (works with language prefixes)
+if (isRoute('about')) {
+    // Current page is About
+}
+
+// Check collection mode (useful in controllers/middleware)
+if (isCollectionMode()) {
+    // String extraction is currently running
+}
 ```
 
 
