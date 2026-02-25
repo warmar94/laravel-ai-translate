@@ -11,6 +11,10 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - ✅ Complete SEO implementation (hreflang, canonical URLs)
 - ✅ RTL language support
 - ✅ Global helper functions for easy integration
+- ✅ Database-backed URL management with API endpoint auto-fetching
+- ✅ Eloquent models for all database operations
+- ✅ Inline manual translation editor per language
+- ✅ Per-string AI translation
 
 ## 🌟 Features
 
@@ -21,6 +25,13 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - 📊 **Real-Time Dashboard**: Beautiful Livewire-powered interface with live progress tracking
 - ⚡ **Queue-Based Processing**: Scalable batch processing for thousands of strings
 - 🎯 **Custom Blade Directive**: Simple `@__t()` syntax for marking translatable strings
+
+### 🔗 URL Management
+- 🗄️ **Database-Backed URLs**: All URLs stored in a dedicated `translation_urls` table with full CRUD support
+- 🌐 **API Endpoint Auto-Fetching**: Add API endpoints that return JSON arrays of URLs — the system fetches and imports them automatically
+- 🔄 **Re-Fetchable Endpoints**: Saved API endpoints can be re-triggered at any time to discover new URLs
+- 🔍 **Search & Filter**: Search URLs inline, toggle active/inactive, bulk add or clear
+- 📊 **Indexed for Scale**: Database columns indexed for performance with tens of thousands of URLs
 
 ### 🚀 Advanced Routing & Localization
 - 🛣️ **Smart Language Routing**: Automatic language-prefixed URLs (`/about`, `/ar/about`, `/es/about`)
@@ -35,6 +46,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Database Schema](#database-schema)
 - [File Structure](#file-structure)
 - [Configuration](#configuration)
 - [Routing System](#routing-system)
@@ -185,37 +197,76 @@ php artisan queue:work
 (For production, use a process manager like Supervisor)
 
 ### 9. Create Required Database Tables
-If you installed via Laravel Command skip this Step. Raw SQL also provided.
 
-Create a migration for the `translation_progress` table:
+The system uses two database tables managed via Eloquent models. If you installed via the Laravel install command, skip this step.
 
-```bash
-php artisan make:migration create_translation_progress_table
-```
-
-Add the following schema:
-
-```php
-Schema::create('translation_progress', function (Blueprint $table) {
-    $table->id();
-    $table->enum('type', ['url_collection', 'string_extraction', 'translation']);
-    $table->string('locale', 10)->nullable();
-    $table->unsignedInteger('total')->default(0);
-    $table->unsignedInteger('completed')->default(0);
-    $table->unsignedInteger('failed')->default(0);
-    $table->timestamp('started_at')->nullable();
-    $table->timestamp('updated_at')->nullable();
-    $table->timestamp('completed_at')->nullable();
-    
-    $table->unique(['type', 'locale']);
-});
-```
-
-Run the migration:
+#### Option A: Laravel Migrations
 
 ```bash
 php artisan migrate
 ```
+
+#### Option B: Raw SQL
+
+```sql
+-- translation_urls: Stores all URLs for string extraction and saved API endpoints
+CREATE TABLE `translation_urls` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `url` TEXT NOT NULL,
+    `active` TINYINT(1) NOT NULL DEFAULT 1,
+    `is_api` TINYINT NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP NULL DEFAULT NULL,
+    `updated_at` TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    INDEX `translation_urls_active_index` (`active`),
+    INDEX `translation_urls_is_api_index` (`is_api`),
+    INDEX `translation_urls_active_is_api_index` (`active`, `is_api`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- translation_progress: Tracks extraction and translation job progress
+CREATE TABLE `translation_progress` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `type` ENUM('string_extraction', 'translation') NOT NULL,
+    `locale` VARCHAR(10) NULL DEFAULT NULL,
+    `total` INT UNSIGNED NOT NULL DEFAULT 0,
+    `completed` INT UNSIGNED NOT NULL DEFAULT 0,
+    `failed` INT UNSIGNED NOT NULL DEFAULT 0,
+    `started_at` TIMESTAMP NULL DEFAULT NULL,
+    `updated_at` TIMESTAMP NULL DEFAULT NULL,
+    `completed_at` TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `translation_progress_type_locale_unique` (`type`, `locale`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+#### Table Details
+
+**`translation_urls`** — Stores all URLs that the system will scan for translatable strings.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | BIGINT UNSIGNED | Auto-increment primary key |
+| `url` | TEXT | The URL to scan (indexed for search) |
+| `active` | TINYINT(1) | Whether the URL is active for extraction (default: 1) |
+| `is_api` | TINYINT | `0` = regular URL (will be scanned for strings), `1` = API endpoint (used to fetch URLs, never scanned directly) |
+| `created_at` | TIMESTAMP | Creation timestamp |
+| `updated_at` | TIMESTAMP | Last update timestamp |
+
+**`translation_progress`** — Tracks the progress of string extraction and translation jobs.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | BIGINT UNSIGNED | Auto-increment primary key |
+| `type` | ENUM | `'string_extraction'` or `'translation'` |
+| `locale` | VARCHAR(10) | Target locale (NULL for string extraction) |
+| `total` | INT UNSIGNED | Total items to process |
+| `completed` | INT UNSIGNED | Items completed |
+| `failed` | INT UNSIGNED | Items failed |
+| `started_at` | TIMESTAMP | When processing started |
+| `updated_at` | TIMESTAMP | Last progress update |
+| `completed_at` | TIMESTAMP | When processing finished |
+
+> **Important:** The `is_api` column distinguishes between regular URLs and API endpoints. Regular URLs (`is_api = 0`) are scanned for translatable strings. API endpoints (`is_api = 1`) are fetched to discover new URLs from their JSON response — they are **never** scanned for strings directly.
 
 ### 10. Install Required Files
 If you installed via Laravel Command skip this Step.
@@ -230,21 +281,25 @@ Copy the following files to your Laravel application:
 **Helpers:**
 - `app/Helpers/Translate/TranslationHelper.php` (contains translation helper functions)
 
+**Models:**
+- `app/Models/Shop/Translate/TranslationUrl.php`
+- `app/Models/Shop/Translate/TranslationProgress.php`
+
 **Services:**
-- `app/Services/Translate/StringExtractor.php`
-- `app/Services/Translate/URLCollector.php`
-- `app/Services/Translate/AITranslator.php`
+- `app/Services/Shop/Translate/StringExtractor.php`
+- `app/Services/Shop/Translate/URLCollector.php`
+- `app/Services/Shop/Translate/AITranslator.php`
 
 **Jobs:**
-- `app/Jobs/Translate/ScanUrlForStringsJob.php`
-- `app/Jobs/Translate/TranslateStringBatchJob.php`
+- `app/Jobs/Shop/ScanUrlForStringsJob.php`
+- `app/Jobs/Shop/TranslateStringBatchJob.php`
 
 **Middleware:**
 - `app/Http/Middleware/Translate/LanguageMiddleware.php`
 
 **Livewire Components:**
-- `app/Livewire/Translate/TranslateMenu.php`
-- `resources/views/livewire/translation/translate-menu.blade.php`
+- `app/Livewire/Shop/Admin/Translate/TranslateMenu.php`
+- `resources/views/livewire/shop/admin/translate/translate-menu.blade.php`
 
 **Blade Views:**
 - `resources/views/lang.blade.php`
@@ -276,27 +331,40 @@ your-laravel-app/
 │   │           └── LanguageMiddleware.php          # Handles language detection and routing
 │   │
 │   ├── Jobs/
-│   │   └── Translate/
+│   │   └── Shop/
 │   │       ├── ScanUrlForStringsJob.php            # Extracts strings from URLs
-│   │       └── TranslateStringBatchJob.php         # Translates string batches
+│   │       └── TranslateStringBatchJob.php         # Translates string batches via AI
 │   │
 │   ├── Livewire/
-│   │   └── Translate/
-│   │       └── TranslateMenu.php                   # Dashboard controller
+│   │   └── Shop/
+│   │       └── Admin/
+│   │           └── Translate/
+│   │               └── TranslateMenu.php           # Dashboard Livewire controller
+│   │
+│   ├── Models/
+│   │   └── Shop/
+│   │       └── Translate/
+│   │           ├── TranslationUrl.php              # Eloquent model for URLs & API endpoints
+│   │           └── TranslationProgress.php         # Eloquent model for job progress tracking
 │   │
 │   ├── Providers/
 │   │   └── Translate/
 │   │       └── TranslationServiceProvider.php      # Registers @__t() directive
 │   │
 │   └── Services/
-│       └── Translate/
-│           ├── AITranslator.php                    # OpenAI API integration
-│           ├── StringExtractor.php                 # String extraction logic
-│           └── URLCollector.php                    # URL collection logic
+│       └── Shop/
+│           └── Translate/
+│               ├── AITranslator.php                # OpenAI API integration
+│               ├── StringExtractor.php             # String extraction logic
+│               └── URLCollector.php                # Database-backed URL collection & API fetching
 │
 ├── config/
-│   ├── translation.php                             # Main configuration file
-│   └── urls.json                                   # Generated URL list (auto-created)
+│   └── translation.php                             # Main configuration file
+│
+├── database/
+│   └── migrations/
+│       ├── create_translation_urls_table.php       # URLs table with indexes
+│       └── create_translation_progress_table.php   # Progress tracking table
 │
 ├── lang/
 │   ├── en.json                                     # English strings (source)
@@ -307,8 +375,10 @@ your-laravel-app/
 │   └── views/
 │       ├── lang.blade.php                          # SEO hreflang tags
 │       └── livewire/
-│           └── translation/
-│               └── translate-menu.blade.php        # Dashboard UI
+│           └── shop/
+│               └── admin/
+│                   └── translate/
+│                       └── translate-menu.blade.php  # Dashboard UI (Tailwind CSS)
 │
 └── routes/
     └── web.php                                     # Route definitions with langRoute()
@@ -851,44 +921,72 @@ Navigate to the dashboard:
 http://your-app.com/translation-dashboard
 ```
 
-### Step 3: Generate URLs
+### Step 3: Add URLs
 
-In the dashboard:
+The dashboard has a tabbed interface. In the **URLs** tab:
 
-1. **Add Manual URLs** (one per line):
+1. **Add Regular URLs** (one per line in the text area):
    ```
    https://your-app.com/home
    https://your-app.com/about
    https://your-app.com/contact
    ```
+   Click **"Add URLs"** — duplicates are automatically skipped.
 
-2. **Add API Endpoints** (optional - for dynamic URLs):
+2. **Add API Endpoints** (in the separate API section):
    ```
-   https://your-app.com/api/sitemap/pages
-   https://your-app.com/api/sitemap/products
+   https://your-app.com/api/sitemaps/blog
+   https://your-app.com/api/sitemaps/products
    ```
+   Click **"Fetch & Import URLs"** — the system will:
+   - Save each API endpoint to the database (with `is_api = 1`)
+   - HTTP GET each endpoint
+   - Parse the JSON array response
+   - Import each URL from the response as a regular URL
+   - Skip any URLs that already exist
 
-3. Click **"Generate URLs"**
+3. **Manage URLs** in the table below:
+   - 🔍 **Search** URLs with the filter box
+   - ✅ **Toggle active/inactive** per URL
+   - 🗑️ **Delete** individual URLs or clear all
+   - 🔄 **Re-fetch** all saved API endpoints to discover new URLs
+
+> **How API endpoints work:** Your API endpoint should return a flat JSON array of URL strings. Example response:
+> ```json
+> [
+>     "https://your-app.com/articles/my-first-post",
+>     "https://your-app.com/articles/my-second-post",
+>     "https://your-app.com/products/widget-pro"
+> ]
+> ```
+> API endpoints are saved and can be re-triggered at any time. They are **never** scanned for translatable strings — only their response URLs are.
 
 ### Step 4: Collect Strings
 
-1. Click **"Collect Strings"** in the dashboard
-
-2. Monitor the real-time progress bar
-
-3. That's it! Collection mode is handled automatically at runtime — no need to toggle any `.env` or config values.
+1. Switch to the **Extract Strings** tab
+2. Click **"Collect Strings"**
+3. Monitor the real-time progress bar
+4. That's it! Collection mode is handled automatically at runtime — no need to toggle any `.env` or config values.
 
 > **How it works:** When you click "Collect Strings", the system dispatches queue jobs that internally enable collection mode only for the duration of each scan request. Normal user traffic is never affected. See [How It Works](#how-it-works) for details.
 
 ### Step 5: Translate All Keys
 
-1. Verify OpenAI API key is configured
+1. Switch to the **Translate** tab
+2. Verify OpenAI API key is configured
+3. Click **"Translate All Keys"**
+4. Monitor translation progress for each language
+5. Translations are processed in batches via queue workers
 
-2. Click **"Translate All Keys"**
+### Step 6: Review & Edit Translations
 
-3. Monitor translation progress for each language
-
-4. Translations are processed in batches via queue workers
+1. Switch to the **Translation Status** tab
+2. View completion percentage per language (color-coded progress bars)
+3. Click any language to open the **inline string editor**:
+   - Search/filter strings
+   - Edit translations directly in the table (saves on Enter or blur)
+   - Click the ✨ sparkles button to AI-translate a single string
+   - Green checkmark = translated, grey dash = missing
 
 ## 🔍 How It Works
 
@@ -963,14 +1061,14 @@ This means:
 
 ### String Collection Process
 
-1. **ScanUrlForStringsJob** dispatched for each URL
+1. **ScanUrlForStringsJob** dispatched for each active URL (where `is_api = 0`)
 2. `StringExtractor` enables collection mode via static property
 3. Job makes an internal Laravel request to the URL
 4. The `@__t()` directive detects collection mode and injects HTML comment markers
 5. HTML response is scanned for `<!--T_START:...:T_END-->` markers
 6. Collection mode is disabled in a `finally` block (guaranteed cleanup)
 7. Unique strings are extracted and saved to `lang/en.json`
-8. Progress tracking is updated in the database
+8. Progress tracking is updated via the `TranslationProgress` model
 
 ### Translation Process
 
@@ -980,7 +1078,17 @@ This means:
 4. **TranslateStringBatchJob** dispatched with batches of 20 strings
 5. OpenAI API called for each string
 6. Translations saved back to language files
-7. Progress tracking updated
+7. Progress tracking updated via the `TranslationProgress` model
+
+### URL Collection from API Endpoints
+
+1. User adds API endpoint URLs in the dashboard
+2. `URLCollector` saves each endpoint with `is_api = 1`
+3. Each endpoint is fetched via HTTP GET
+4. JSON array response is parsed
+5. Each URL from the response is saved as a regular URL (`is_api = 0`)
+6. Duplicate URLs are automatically skipped
+7. Saved endpoints can be re-fetched at any time to discover new content
 
 ### Language Routing
 
@@ -1027,42 +1135,85 @@ The `lang.blade.php` file generates proper SEO tags:
 
 ## 🎯 Advanced Features
 
-### Progress Tracking
+### Eloquent Models
 
-The system tracks progress in real-time using the `translation_progress` table:
+The system uses two Eloquent models instead of raw `DB::table()` queries for all database operations:
+
+#### TranslationUrl Model
 
 ```php
-// Check extraction progress
-$progress = DB::table('translation_progress')
-    ->where('type', 'string_extraction')
-    ->whereNull('locale')
-    ->first();
+use App\Models\Shop\Translate\TranslationUrl;
 
-// Check translation progress for Arabic
-$progress = DB::table('translation_progress')
-    ->where('type', 'translation')
-    ->where('locale', 'ar')
-    ->first();
+// Get all active extractable URLs (is_api = 0, active = 1)
+$urls = TranslationUrl::extractable()->pluck('url');
+
+// Get all regular URLs
+$urls = TranslationUrl::regularUrls()->get();
+
+// Get all API endpoints
+$endpoints = TranslationUrl::apiEndpoints()->get();
+
+// Get only active records
+$active = TranslationUrl::active()->get();
 ```
+
+Available scopes:
+- `active()` — where `active = true`
+- `regularUrls()` — where `is_api = 0`
+- `apiEndpoints()` — where `is_api = 1`
+- `extractable()` — where `active = true` AND `is_api = 0`
+
+#### TranslationProgress Model
+
+```php
+use App\Models\Shop\Translate\TranslationProgress;
+
+// Get string extraction progress
+$extraction = TranslationProgress::stringExtraction()->first();
+echo $extraction->percentage; // 75.5
+echo $extraction->status;     // 'running', 'completed', or 'idle'
+
+// Get translation progress for Arabic
+$progress = TranslationProgress::translation()->forLocale('ar')->first();
+echo $progress->completed . ' of ' . $progress->total;
+```
+
+Available scopes:
+- `stringExtraction()` — where `type = 'string_extraction'` and `locale IS NULL`
+- `translation()` — where `type = 'translation'`
+- `forLocale($locale)` — where `locale = $locale`
+
+Computed attributes:
+- `$progress->percentage` — calculated completion percentage (0-100)
+- `$progress->status` — returns `'idle'`, `'running'`, or `'completed'`
 
 ### API Endpoints for Dynamic URLs
 
-If you have dynamic content (products, articles, etc.), create API endpoints:
+If you have dynamic content (products, articles, etc.), create API endpoints that return a flat JSON array of URLs:
 
 ```php
 // routes/api.php
-Route::get('/sitemap/products', function () {
-    $products = Product::all();
-    return $products->map(function($product) {
-        return url('/products/' . $product->slug);
-    });
+Route::get('/sitemaps/products', function () {
+    return Product::all()->map(fn($p) => url('/products/' . $p->slug))->values();
+});
+
+Route::get('/sitemaps/blog', function () {
+    return Article::published()->get()->map(fn($a) => url('/articles/' . $a->slug))->values();
 });
 ```
 
-Then add the endpoint in the dashboard:
+Then add the endpoints in the dashboard's **API Endpoints** section:
 ```
-https://your-app.com/api/sitemap/products
+https://your-app.com/api/sitemaps/products
+https://your-app.com/api/sitemaps/blog
 ```
+
+The system will:
+1. Save each endpoint to the database (with `is_api = 1`)
+2. Fetch the JSON response from each endpoint
+3. Import every URL from the response as a regular extractable URL
+4. Skip duplicates automatically
+5. Allow re-fetching at any time to pick up new content
 
 ### Custom Translation Prompts
 
@@ -1084,6 +1235,17 @@ The system includes built-in rate limiting to respect OpenAI's API rate limits:
 Adjust based on your OpenAI tier:
 - Free tier: 60-100 requests/minute
 - Paid tier: 300-3500 requests/minute
+
+### Inline Translation Editor
+
+The **Translation Status** tab shows completion percentage per language. Clicking a language opens an inline editor where you can:
+
+- **Search** strings by English source text or existing translation
+- **Edit translations manually** — type directly in the input field, saves on Enter or blur
+- **AI-translate individual strings** — click the sparkles (✨) icon to translate a single string via OpenAI
+- **See translation status** — green checkmark for translated, grey dash for missing
+
+This is useful for reviewing AI translations, fixing specific strings, or translating a few strings without running a full batch.
 
 ## 🐛 Troubleshooting
 
@@ -1116,6 +1278,13 @@ Adjust based on your OpenAI tier:
    php artisan tinker
    >>> isCollectionMode()
    # Should return false
+   ```
+
+6. **Verify URLs exist in the database:**
+   ```bash
+   php artisan tinker
+   >>> \App\Models\Shop\Translate\TranslationUrl::extractable()->count()
+   # Should return > 0
    ```
 
 ### Translations Not Working
@@ -1175,12 +1344,60 @@ langRoute('get', '/dashboard', Dashboard::class, 'dashboard', [], ['auth']);
 
 See [Routing System](#routing-system) for details.
 
+### API Endpoints Not Importing URLs
+
+1. **Verify endpoint returns a flat JSON array:**
+   ```bash
+   curl https://your-app.com/api/sitemaps/blog
+   # Should return: ["https://...", "https://...", ...]
+   ```
+
+2. **Check that the response is valid JSON** — the system expects a flat array of URL strings, not nested objects.
+
+3. **Check logs for errors:**
+   ```bash
+   tail -f storage/logs/laravel.log | grep "URLCollector"
+   ```
+
+4. **Verify the endpoint is saved:**
+   ```bash
+   php artisan tinker
+   >>> \App\Models\Shop\Translate\TranslationUrl::apiEndpoints()->pluck('url')
+   ```
+
 ## 📖 API Reference
+
+### TranslationUrl Model
+
+```php
+use App\Models\Shop\Translate\TranslationUrl;
+
+// Scopes
+TranslationUrl::active();          // active = true
+TranslationUrl::regularUrls();     // is_api = 0
+TranslationUrl::apiEndpoints();    // is_api = 1
+TranslationUrl::extractable();     // active = true AND is_api = 0
+```
+
+### TranslationProgress Model
+
+```php
+use App\Models\Shop\Translate\TranslationProgress;
+
+// Scopes
+TranslationProgress::stringExtraction();      // type = 'string_extraction', locale IS NULL
+TranslationProgress::translation();           // type = 'translation'
+TranslationProgress::forLocale('ar');         // locale = 'ar'
+
+// Computed attributes
+$record->percentage;  // float (0-100)
+$record->status;      // 'idle' | 'running' | 'completed'
+```
 
 ### StringExtractor Service
 
 ```php
-use App\Services\Translate\StringExtractor;
+use App\Services\Shop\Translate\StringExtractor;
 
 $extractor = new StringExtractor();
 
@@ -1200,7 +1417,7 @@ $isActive = StringExtractor::$collectionMode;
 ### AITranslator Service
 
 ```php
-use App\Services\Translate\AITranslator;
+use App\Services\Shop\Translate\AITranslator;
 
 $translator = new AITranslator();
 
@@ -1213,6 +1430,9 @@ $translations = $translator->translateBatch([
     'world' => 'World',
 ], 'ar');
 
+// Get target locales from config
+$locales = $translator->getTargetLocales();
+
 // Check if configured
 if ($translator->isConfigured()) {
     // API key is set
@@ -1222,26 +1442,50 @@ if ($translator->isConfigured()) {
 ### URLCollector Service
 
 ```php
-use App\Services\Translate\URLCollector;
+use App\Services\Shop\Translate\URLCollector;
 
 $collector = new URLCollector();
 
-// Add manual URLs
-$collector->addManualUrls([
+// Add a single URL (returns null if duplicate)
+$record = $collector->addUrl('https://your-app.com/home');
+
+// Add multiple URLs at once (returns count of newly added)
+$added = $collector->addBulk([
     'https://your-app.com/home',
     'https://your-app.com/about',
 ]);
 
-// Collect from API endpoints
-$collector->collectFromAPIs([
-    'products' => 'https://your-app.com/api/sitemap/products',
+// Add an API endpoint (saved with is_api = 1)
+$record = $collector->addApiEndpoint('https://your-app.com/api/sitemaps/blog');
+
+// Fetch URLs from a single API endpoint (saves endpoint + imports response URLs)
+$added = $collector->collectFromApiEndpoint('https://your-app.com/api/sitemaps/blog');
+
+// Fetch URLs from multiple API endpoints
+$added = $collector->collectFromApiEndpoints([
+    'https://your-app.com/api/sitemaps/blog',
+    'https://your-app.com/api/sitemaps/products',
 ]);
 
-// Save to config
-$total = $collector->saveToConfig();
+// Re-fetch all saved API endpoints to discover new URLs
+$added = $collector->refreshAllApiEndpoints();
 
-// Load from config
-$urls = $collector->loadFromConfig();
+// Get all extractable URLs (active, non-API) as a flat array
+$urls = $collector->getExtractableUrls();
+
+// Get count of extractable URLs
+$count = $collector->getExtractableCount();
+
+// Remove a URL by ID
+$collector->removeById(42);
+
+// Toggle active/inactive
+$collector->toggleActive(42);
+
+// Clear operations
+$collector->clearRegularUrls();     // Remove all regular URLs (keeps API endpoints)
+$collector->clearApiEndpoints();    // Remove all API endpoints (keeps regular URLs)
+$collector->clearAll();             // Remove everything
 ```
 
 ### Global Helper Functions
