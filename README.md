@@ -1142,7 +1142,7 @@ The system uses two Eloquent models instead of raw `DB::table()` queries for all
 #### TranslationUrl Model
 
 ```php
-use App\Models\Shop\Translate\TranslationUrl;
+use App\Models\Translate\TranslationUrl;
 
 // Get all active extractable URLs (is_api = 0, active = 1)
 $urls = TranslationUrl::extractable()->pluck('url');
@@ -1166,7 +1166,7 @@ Available scopes:
 #### TranslationProgress Model
 
 ```php
-use App\Models\Shop\Translate\TranslationProgress;
+use App\Models\Translate\TranslationProgress;
 
 // Get string extraction progress
 $extraction = TranslationProgress::stringExtraction()->first();
@@ -1283,7 +1283,7 @@ This is useful for reviewing AI translations, fixing specific strings, or transl
 6. **Verify URLs exist in the database:**
    ```bash
    php artisan tinker
-   >>> \App\Models\Shop\Translate\TranslationUrl::extractable()->count()
+   >>> \App\Models\Translate\TranslationUrl::extractable()->count()
    # Should return > 0
    ```
 
@@ -1362,7 +1362,7 @@ See [Routing System](#routing-system) for details.
 4. **Verify the endpoint is saved:**
    ```bash
    php artisan tinker
-   >>> \App\Models\Shop\Translate\TranslationUrl::apiEndpoints()->pluck('url')
+   >>> \App\Models\Translate\TranslationUrl::apiEndpoints()->pluck('url')
    ```
 
 ## 📖 API Reference
@@ -1370,7 +1370,7 @@ See [Routing System](#routing-system) for details.
 ### TranslationUrl Model
 
 ```php
-use App\Models\Shop\Translate\TranslationUrl;
+use App\Models\Translate\TranslationUrl;
 
 // Scopes
 TranslationUrl::active();          // active = true
@@ -1382,7 +1382,7 @@ TranslationUrl::extractable();     // active = true AND is_api = 0
 ### TranslationProgress Model
 
 ```php
-use App\Models\Shop\Translate\TranslationProgress;
+use App\Models\Translate\TranslationProgress;
 
 // Scopes
 TranslationProgress::stringExtraction();      // type = 'string_extraction', locale IS NULL
@@ -1397,7 +1397,7 @@ $record->status;      // 'idle' | 'running' | 'completed'
 ### StringExtractor Service
 
 ```php
-use App\Services\Shop\Translate\StringExtractor;
+use App\Services\Translate\StringExtractor;
 
 $extractor = new StringExtractor();
 
@@ -1417,7 +1417,7 @@ $isActive = StringExtractor::$collectionMode;
 ### AITranslator Service
 
 ```php
-use App\Services\Shop\Translate\AITranslator;
+use App\Services\Translate\AITranslator;
 
 $translator = new AITranslator();
 
@@ -1442,7 +1442,7 @@ if ($translator->isConfigured()) {
 ### URLCollector Service
 
 ```php
-use App\Services\Shop\Translate\URLCollector;
+use App\Services\Translate\URLCollector;
 
 $collector = new URLCollector();
 

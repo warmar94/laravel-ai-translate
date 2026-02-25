@@ -3,13 +3,13 @@
 namespace App\Livewire\Translate;
 
 use Livewire\Component;
-use App\Models\Shop\Translate\TranslationUrl;
-use App\Models\Shop\Translate\TranslationProgress;
-use App\Services\Shop\Translate\URLCollector;
-use App\Services\Shop\Translate\StringExtractor;
-use App\Services\Shop\Translate\AITranslator;
-use App\Jobs\Shop\ScanUrlForStringsJob;
-use App\Jobs\Shop\TranslateStringBatchJob;
+use App\Models\Translate\TranslationUrl;
+use App\Models\Translate\TranslationProgress;
+use App\Services\Translate\URLCollector;
+use App\Services\Translate\StringExtractor;
+use App\Services\Translate\AITranslator;
+use App\Jobs\Translate\ScanUrlForStringsJob;
+use App\Jobs\Translate\TranslateStringBatchJob;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Title;
 
