@@ -1,215 +1,291 @@
 <?php
-// app/Livewire/Translation/TranslateMenu.php
 
 namespace App\Livewire\Translate;
 
 use Livewire\Component;
-use App\Services\Translate\URLCollector;
-use App\Services\Translate\StringExtractor;
-use App\Services\Translate\AITranslator;
-use App\Jobs\Translate\ScanUrlForStringsJob;
-use App\Jobs\Translate\TranslateStringBatchJob;
-use Illuminate\Support\Facades\DB;
+use App\Models\Shop\Translate\TranslationUrl;
+use App\Models\Shop\Translate\TranslationProgress;
+use App\Services\Shop\Translate\URLCollector;
+use App\Services\Shop\Translate\StringExtractor;
+use App\Services\Shop\Translate\AITranslator;
+use App\Jobs\Shop\ScanUrlForStringsJob;
+use App\Jobs\Shop\TranslateStringBatchJob;
 use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Title;
 
+#[Title('Translation Manager')]
 class TranslateMenu extends Component
 {
-    // URL Collection
-    public $manualUrls = '';
-    public $apiEndpoints = '';
-    public $totalUrls = 0;
+    // Tab
+    public string $activeTab = 'urls';
+
+    // URL inputs
+    public string $bulkUrls = '';
+    public string $apiEndpointInput = '';
+    public string $urlFilter = '';
+
+    // Counts
+    public int $totalUrls = 0;
+    public int $totalApiEndpoints = 0;
 
     protected $logProcess;
-    
+
     // Progress tracking
     public $stringExtractionProgress = [
         'total' => 0,
         'completed' => 0,
         'failed' => 0,
         'percentage' => 0,
-        'status' => 'idle', // idle, running, completed, failed
+        'status' => 'idle',
     ];
-    
+
     public $translationProgress = [];
-    
-    // Status messages
+
+    // Status
     public $statusMessage = '';
-    public $statusType = 'info'; // info, success, error, warning
+    public $statusType = 'info';
     public $isProcessing = false;
-    
+
     // Stats
-    public $totalKeysInEnJson = 0;
-    
+    public int $totalKeysInEnJson = 0;
+
+    // Translation status tab
+    public array $translationStatus = [];
+
+    // String editor
+    public string $editingLocale = '';
+    public string $stringSearch = '';
+    public array $editableStrings = [];
+    public bool $showStringEditor = false;
+
     public function mount()
     {
         $this->logProcess = config('translation.log_process', false);
         $this->loadProgress();
-        $this->loadExistingUrls();
+        $this->refreshCounts();
         $this->loadStats();
+        $this->loadTranslationStatus();
     }
-    
-    public function loadExistingUrls()
+
+    // ─── URL Management ───//
+
+    public function refreshCounts()
+    {
+        $this->totalUrls = TranslationUrl::extractable()->count();
+        $this->totalApiEndpoints = TranslationUrl::apiEndpoints()->count();
+    }
+
+    public function getRegularUrlsProperty()
+    {
+        $query = TranslationUrl::regularUrls()->orderBy('id', 'desc');
+
+        if ($this->urlFilter) {
+            $query->where('url', 'like', '%' . $this->urlFilter . '%');
+        }
+
+        return $query->get();
+    }
+
+    public function getApiEndpointsProperty()
+    {
+        return TranslationUrl::apiEndpoints()->orderBy('id', 'desc')->get();
+    }
+
+    public function addBulkUrls()
+    {
+        $input = trim($this->bulkUrls);
+        if (empty($input)) {
+            $this->statusMessage = "Please enter at least one URL.";
+            $this->statusType = 'warning';
+            return;
+        }
+
+        $lines = array_filter(array_map('trim', explode("\n", $input)));
+
+        $collector = new URLCollector();
+        $added = $collector->addBulk($lines);
+
+        $skipped = count($lines) - $added;
+        $this->statusMessage = "Added {$added} new URL(s)." . ($skipped > 0 ? " {$skipped} duplicate(s) skipped." : '');
+        $this->statusType = 'success';
+        $this->bulkUrls = '';
+        $this->refreshCounts();
+    }
+
+    public function addApiEndpoints()
+    {
+        $input = trim($this->apiEndpointInput);
+        if (empty($input)) {
+            $this->statusMessage = "Please enter at least one API endpoint.";
+            $this->statusType = 'warning';
+            return;
+        }
+
+        $lines = array_filter(array_map('trim', explode("\n", $input)));
+
+        $collector = new URLCollector();
+        $totalAdded = $collector->collectFromApiEndpoints($lines);
+
+        $this->statusMessage = "Processed " . count($lines) . " API endpoint(s). {$totalAdded} new URL(s) collected.";
+        $this->statusType = 'success';
+        $this->apiEndpointInput = '';
+        $this->refreshCounts();
+    }
+
+    public function refreshApiEndpoints()
     {
         $collector = new URLCollector();
-        $urls = $collector->loadFromConfig();
-        $this->totalUrls = count($urls);
+        $added = $collector->refreshAllApiEndpoints();
+
+        $this->statusMessage = "Refreshed all API endpoints. {$added} new URL(s) added.";
+        $this->statusType = 'success';
+        $this->refreshCounts();
     }
-    
+
+    public function removeUrl(int $id)
+    {
+        $collector = new URLCollector();
+        $collector->removeById($id);
+        $this->refreshCounts();
+        $this->statusMessage = "URL removed.";
+        $this->statusType = 'success';
+    }
+
+    public function toggleUrlActive(int $id)
+    {
+        $collector = new URLCollector();
+        $collector->toggleActive($id);
+        $this->refreshCounts();
+    }
+
+    public function clearRegularUrls()
+    {
+        $collector = new URLCollector();
+        $collector->clearRegularUrls();
+        $this->refreshCounts();
+        $this->statusMessage = "All regular URLs cleared.";
+        $this->statusType = 'success';
+    }
+
+    public function clearApiEndpoints()
+    {
+        $collector = new URLCollector();
+        $collector->clearApiEndpoints();
+        $this->refreshCounts();
+        $this->statusMessage = "All API endpoints cleared.";
+        $this->statusType = 'success';
+    }
+
+    public function clearAllUrls()
+    {
+        $collector = new URLCollector();
+        $collector->clearAll();
+        $this->refreshCounts();
+        $this->statusMessage = "Everything cleared.";
+        $this->statusType = 'success';
+    }
+
+    // ─── Stats ───//
+
     public function loadStats()
     {
         $extractor = new StringExtractor();
         $keys = $extractor->getAllKeys('en');
         $this->totalKeysInEnJson = count($keys);
     }
-    
-    public function loadProgress()
+
+    public function loadTranslationStatus()
     {
-        // Get string extraction progress
-        $extractionProgress = DB::table('translation_progress')
-            ->where('type', 'string_extraction')
-            ->whereNull('locale')
-            ->first();
-            
-        if ($extractionProgress) {
-            $this->stringExtractionProgress = [
-                'total' => $extractionProgress->total,
-                'completed' => $extractionProgress->completed,
-                'failed' => $extractionProgress->failed,
-                'percentage' => $extractionProgress->total > 0 
-                    ? round(($extractionProgress->completed / $extractionProgress->total) * 100, 1)
-                    : 0,
-                'status' => $this->getStatus($extractionProgress),
-            ];
-        }
-        
-        // Get translation progress for each locale
+        $extractor = new StringExtractor();
+        $enKeys = $extractor->getAllKeys('en');
+        $totalEn = count($enKeys);
+
         $translator = new AITranslator();
         $locales = $translator->getTargetLocales();
-        
+        $languages = config('translation.languages', []);
+
+        $this->translationStatus = [];
+
         foreach ($locales as $locale) {
-            $progress = DB::table('translation_progress')
-                ->where('type', 'translation')
-                ->where('locale', $locale)
-                ->first();
-                
+            $targetKeys = $extractor->getAllKeys($locale);
+
+            $translated = 0;
+            foreach ($targetKeys as $key => $value) {
+                if ($value !== $key && !empty($value)) {
+                    $translated++;
+                }
+            }
+
+            $percentage = $totalEn > 0 ? round(($translated / $totalEn) * 100, 1) : 0;
+
+            $this->translationStatus[$locale] = [
+                'name' => $languages[$locale] ?? strtoupper($locale),
+                'locale' => $locale,
+                'total_en' => $totalEn,
+                'total_target' => count($targetKeys),
+                'translated' => $translated,
+                'missing' => $totalEn - $translated,
+                'percentage' => $percentage,
+            ];
+        }
+    }
+
+    // ─── Progress ───//
+
+    public function loadProgress()
+    {
+        $extraction = TranslationProgress::stringExtraction()->first();
+
+        if ($extraction) {
+            $this->stringExtractionProgress = [
+                'total' => $extraction->total,
+                'completed' => $extraction->completed,
+                'failed' => $extraction->failed,
+                'percentage' => $extraction->percentage,
+                'status' => $extraction->status,
+            ];
+        }
+
+        $translator = new AITranslator();
+        $locales = $translator->getTargetLocales();
+
+        foreach ($locales as $locale) {
+            $progress = TranslationProgress::translation()->forLocale($locale)->first();
+
             if ($progress) {
                 $this->translationProgress[$locale] = [
                     'total' => $progress->total,
                     'completed' => $progress->completed,
                     'failed' => $progress->failed,
-                    'percentage' => $progress->total > 0 
-                        ? round(($progress->completed / $progress->total) * 100, 1)
-                        : 0,
-                    'status' => $this->getStatus($progress),
+                    'percentage' => $progress->percentage,
+                    'status' => $progress->status,
                 ];
             } else {
                 $this->translationProgress[$locale] = [
-                    'total' => 0,
-                    'completed' => 0,
-                    'failed' => 0,
-                    'percentage' => 0,
-                    'status' => 'idle',
+                    'total' => 0, 'completed' => 0, 'failed' => 0,
+                    'percentage' => 0, 'status' => 'idle',
                 ];
             }
         }
-        
-        // Update stats after progress check
+
         $this->loadStats();
     }
-    
-    protected function getStatus($progress): string
-    {
-        if ($progress->total == 0) {
-            return 'idle';
-        }
-        
-        if ($progress->completed == $progress->total) {
-            return 'completed';
-        }
-        
-        if ($progress->completed > 0) {
-            return 'running';
-        }
-        
-        return 'idle';
-    }
-    
-    public function generateUrls()
-    {
-        try {
-            $collector = new URLCollector();
-            
-            // Add manual URLs (one per line)
-            if ($this->manualUrls) {
-                $manualArray = array_filter(
-                    array_map('trim', explode("\n", $this->manualUrls))
-                );
-                $collector->addManualUrls($manualArray);
-            }
-            
-            // Add API endpoints (one per line, format: name|url)
-            if ($this->apiEndpoints) {
-                $apiArray = array_filter(
-                    array_map('trim', explode("\n", $this->apiEndpoints))
-                );
-                
-                $endpoints = [];
-                foreach ($apiArray as $line) {
-                    // Support both "url" and "name|url" formats
-                    if (str_contains($line, '|')) {
-                        [$name, $url] = explode('|', $line, 2);
-                        $endpoints[trim($name)] = trim($url);
-                    } else {
-                        $endpoints[] = trim($line);
-                    }
-                }
-                
-                $collector->collectFromAPIs($endpoints);
-            }
-            
-            // Save to config/urls.json
-            $this->totalUrls = $collector->saveToConfig();
-            
-            $this->statusMessage = "Generated {$this->totalUrls} URLs successfully! Ready to collect strings.";
-            $this->statusType = 'success';
-            
-        } catch (\Exception $e) {
-            $this->statusMessage = "Error: " . $e->getMessage();
-            $this->statusType = 'error';
-            \Log::error('URL generation failed: ' . $e->getMessage());
-        }
-    }
+
+    // ─── Collect Strings ───//
 
     public function collectStrings()
     {
-        if ($this->logProcess) {
-            Log::info("=== COLLECT STRINGS STARTED ===");
-        }
-        
         try {
             $collector = new URLCollector();
-            $urls = $collector->loadFromConfig();
-            
-            if ($this->logProcess) {
-                Log::info("Loaded URLs", ['count' => count($urls), 'urls' => $urls]);
-            }
-            
+            $urls = $collector->getExtractableUrls();
+
             if (empty($urls)) {
-                $this->statusMessage = "No URLs found. Please generate URLs first.";
+                $this->statusMessage = "No active URLs to extract from.";
                 $this->statusType = 'error';
-                
-                if ($this->logProcess) {
-                    Log::warning("No URLs found");
-                }
                 return;
             }
-            
-            // Reset or create progress tracking
-            if ($this->logProcess) {
-                Log::info("Creating progress tracking entry");
-            }
-            
-            DB::table('translation_progress')->updateOrInsert(
+
+            TranslationProgress::updateOrCreate(
                 ['type' => 'string_extraction', 'locale' => null],
                 [
                     'total' => count($urls),
@@ -220,45 +296,25 @@ class TranslateMenu extends Component
                     'completed_at' => null,
                 ]
             );
-            
-            if ($this->logProcess) {
-                Log::info("Progress tracking created");
-            }
-            
-            // Dispatch jobs for each URL
+
             $delay = config('translation.urls.delay_between_requests', 1);
-            
-            if ($this->logProcess) {
-                Log::info("Dispatching jobs", ['delay' => $delay]);
-            }
-            
-            foreach ($urls as $index => $url) {
-                if ($this->logProcess) {
-                    Log::info("Dispatching job #{$index} for URL: {$url}");
-                }
+
+            foreach ($urls as $url) {
                 ScanUrlForStringsJob::dispatch($url, $delay);
             }
-            
-            $this->statusMessage = "Started collecting strings from {$this->totalUrls} URLs! Check progress below.";
+
+            $this->statusMessage = "Started collecting strings from " . count($urls) . " URLs!";
             $this->statusType = 'success';
             $this->isProcessing = true;
-            
-            if ($this->logProcess) {
-                Log::info("=== COLLECT STRINGS COMPLETED ===");
-            }
-            
-            // Refresh progress immediately
             $this->loadProgress();
-            
+
         } catch (\Exception $e) {
             $this->statusMessage = "Error: " . $e->getMessage();
             $this->statusType = 'error';
-            Log::error('String collection failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
         }
     }
+
+    // ─── Translate ───//
 
     public function translateAll()
     {
@@ -266,47 +322,40 @@ class TranslateMenu extends Component
             $extractor = new StringExtractor();
             $sourceLocale = config('translation.source_locale', 'en');
             $sourceKeys = $extractor->getAllKeys($sourceLocale);
-            
+
             if (empty($sourceKeys)) {
-                $this->statusMessage = "No strings found in {$sourceLocale}.json. Please collect strings first.";
+                $this->statusMessage = "No strings found in {$sourceLocale}.json.";
                 $this->statusType = 'error';
                 return;
             }
-            
+
             $translator = new AITranslator();
-            
-            // Check if API key is configured
+
             if (!$translator->isConfigured()) {
-                $this->statusMessage = "OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.";
+                $this->statusMessage = "OpenAI API key not configured.";
                 $this->statusType = 'error';
                 return;
             }
-            
+
             $locales = $translator->getTargetLocales();
             $batchSize = config('translation.translation.batch_size', 20);
-            
             $totalUntranslated = 0;
-            
+
             foreach ($locales as $locale) {
-                // Get existing translations
                 $existing = $extractor->getAllKeys($locale);
-                
-                // Find untranslated keys
+
                 $untranslated = [];
                 foreach ($sourceKeys as $key => $value) {
                     if (!isset($existing[$key]) || $existing[$key] === $key) {
                         $untranslated[$key] = $value;
                     }
                 }
-                
-                if (empty($untranslated)) {
-                    continue;
-                }
-                
+
+                if (empty($untranslated)) continue;
+
                 $totalUntranslated += count($untranslated);
-                
-                // Reset or create progress tracking
-                DB::table('translation_progress')->updateOrInsert(
+
+                TranslationProgress::updateOrCreate(
                     ['type' => 'translation', 'locale' => $locale],
                     [
                         'total' => count($untranslated),
@@ -317,69 +366,160 @@ class TranslateMenu extends Component
                         'completed_at' => null,
                     ]
                 );
-                
-                // Split into batches and dispatch jobs
+
                 $batches = array_chunk($untranslated, $batchSize, true);
-                
                 foreach ($batches as $batch) {
                     TranslateStringBatchJob::dispatch($batch, $locale);
                 }
             }
-            
+
             if ($totalUntranslated == 0) {
                 $this->statusMessage = "All strings are already translated!";
                 $this->statusType = 'info';
             } else {
-                $this->statusMessage = "Started translating {$totalUntranslated} strings to " . count($locales) . " languages! Check progress below.";
+                $this->statusMessage = "Started translating {$totalUntranslated} strings to " . count($locales) . " languages!";
                 $this->statusType = 'success';
                 $this->isProcessing = true;
             }
-            
-            // Refresh progress immediately
+
             $this->loadProgress();
-            
+
         } catch (\Exception $e) {
             $this->statusMessage = "Error: " . $e->getMessage();
             $this->statusType = 'error';
-            Log::error('Translation failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
         }
     }
-    
+
+    // ─── String Editor ───//
+
+    public function openLocaleEditor(string $locale)
+    {
+        $this->editingLocale = $locale;
+        $this->stringSearch = '';
+        $this->loadEditableStrings();
+        $this->showStringEditor = true;
+    }
+
+    public function loadEditableStrings()
+    {
+        $extractor = new StringExtractor();
+        $enKeys = $extractor->getAllKeys('en');
+        $targetKeys = $extractor->getAllKeys($this->editingLocale);
+
+        $this->editableStrings = [];
+
+        foreach ($enKeys as $key => $enValue) {
+            $targetValue = $targetKeys[$key] ?? '';
+            $isTranslated = !empty($targetValue) && $targetValue !== $key;
+
+            if ($this->stringSearch) {
+                $search = strtolower($this->stringSearch);
+                if (
+                    strpos(strtolower($key), $search) === false &&
+                    strpos(strtolower($targetValue), $search) === false
+                ) {
+                    continue;
+                }
+            }
+
+            $this->editableStrings[] = [
+                'key' => $key,
+                'en' => $enValue,
+                'target' => $targetValue,
+                'is_translated' => $isTranslated,
+            ];
+        }
+    }
+
+    public function updatedStringSearch()
+    {
+        $this->loadEditableStrings();
+    }
+
+    public function saveStringTranslation(string $key, string $value)
+    {
+        if (empty($this->editingLocale)) return;
+
+        $filePath = lang_path("{$this->editingLocale}.json");
+
+        $existing = [];
+        if (file_exists($filePath)) {
+            $existing = json_decode(file_get_contents($filePath), true) ?? [];
+        }
+
+        $existing[$key] = $value;
+        ksort($existing);
+
+        file_put_contents(
+            $filePath,
+            json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        );
+
+        $this->loadEditableStrings();
+        $this->loadTranslationStatus();
+        $this->statusMessage = "Translation saved.";
+        $this->statusType = 'success';
+    }
+
+    public function translateSingleString(string $key)
+    {
+        if (empty($this->editingLocale)) return;
+
+        $extractor = new StringExtractor();
+        $enKeys = $extractor->getAllKeys('en');
+        $sourceText = $enKeys[$key] ?? $key;
+
+        $translator = new AITranslator();
+
+        if (!$translator->isConfigured()) {
+            $this->statusMessage = "OpenAI API key not configured.";
+            $this->statusType = 'error';
+            return;
+        }
+
+        $translated = $translator->translate($sourceText, $this->editingLocale);
+
+        if ($translated) {
+            $this->saveStringTranslation($key, $translated);
+            $this->statusMessage = "AI translated successfully.";
+            $this->statusType = 'success';
+        } else {
+            $this->statusMessage = "AI translation failed.";
+            $this->statusType = 'error';
+        }
+    }
+
+    public function closeStringEditor()
+    {
+        $this->showStringEditor = false;
+        $this->editingLocale = '';
+        $this->editableStrings = [];
+        $this->stringSearch = '';
+    }
+
+    // ─── General ───//
+
     public function refreshProgress()
     {
         $this->loadProgress();
+        $this->loadTranslationStatus();
     }
-    
+
     public function resetProgress()
     {
-        DB::table('translation_progress')->truncate();
+        TranslationProgress::truncate();
         $this->loadProgress();
         $this->statusMessage = "Progress reset successfully!";
         $this->statusType = 'success';
     }
-    
-    public function clearUrlsJson()
-    {
-        $path = config_path('urls.json');
-        if (file_exists($path)) {
-            unlink($path);
-        }
-        $this->totalUrls = 0;
-        $this->statusMessage = "URLs cleared successfully!";
-        $this->statusType = 'success';
-    }
-    
+
     public function render()
     {
         return view('livewire.translate.translate-menu')
             ->layoutData([
-                'title' => 'Translate Menu',
-                'description' => 'Translation and localization tools will be available here soon.',
-                'keywords' => 'translation, localization, language tools, coming soon',
+                'title' => 'Translation Manager',
+                'description' => 'Translation and localization management tools.',
+                'keywords' => 'translation, localization, language tools',
             ]);
     }
-
 }

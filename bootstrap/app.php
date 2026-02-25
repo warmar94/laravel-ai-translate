@@ -5,7 +5,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
 // Declare Middleware
-use App\Http\Middleware\LanguageMiddleware;
+use App\Http\Middleware\Translate\LanguageMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(

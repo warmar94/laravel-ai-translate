@@ -34,7 +34,7 @@ class InstallAiTranslateCommand extends Command
             '--force' => true,
         ]);
 
-        // Publish app files (services, jobs, livewire, middleware, providers, helpers)
+        // Publish app files (models, services, jobs, livewire, middleware, providers, helpers)
         $this->call('vendor:publish', [
             '--provider' => 'Warmar\\LaravelAiTranslate\\LaravelAiTranslateServiceProvider',
             '--tag' => 'ai-translate-app',
@@ -44,7 +44,7 @@ class InstallAiTranslateCommand extends Command
         $this->newLine();
         $this->info('Publishing complete!');
 
-        // Optional: migrate if user wants
+        // Optional: migrate
         if ($this->confirm('Would you like to run migrations now?', true)) {
             $this->call('migrate');
         }

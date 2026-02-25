@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('translation_progress', function (Blueprint $table) {
             $table->id();
-            $table->enum('type', ['url_collection', 'string_extraction', 'translation']);
+            $table->enum('type', ['string_extraction', 'translation']);
             $table->string('locale', 10)->nullable();
             $table->unsignedInteger('total')->default(0);
             $table->unsignedInteger('completed')->default(0);
@@ -18,7 +18,7 @@ return new class extends Migration
             $table->timestamp('started_at')->nullable();
             $table->timestamp('updated_at')->nullable();
             $table->timestamp('completed_at')->nullable();
-            
+
             $table->unique(['type', 'locale']);
         });
     }

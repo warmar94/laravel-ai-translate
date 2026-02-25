@@ -1,135 +1,204 @@
 <?php
-// app/Services/Translation/URLCollector.php
 
-namespace App\Services\Translation;
+namespace App\Services\Translate;
 
+use App\Models\Translate\TranslationUrl;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class URLCollector
 {
-    protected array $urls = [];
     protected $logProcess = false;
-    
+
     public function __construct()
     {
         $this->logProcess = config('translation.log_process', false);
     }
-    
-    public function collectFromAPIs(array $apiEndpoints): array
+
+    public function addUrl(string $url): ?TranslationUrl
     {
-        if ($this->logProcess) {
-            Log::info("Collecting URLs from APIs", ['endpoints' => $apiEndpoints]);
+        $url = trim($url);
+        if (empty($url)) {
+            return null;
         }
-        
-        foreach ($apiEndpoints as $name => $endpoint) {
-            try {
-                if ($this->logProcess) {
-                    Log::info("Fetching from API: {$endpoint}");
-                }
-                
-                $response = Http::timeout(30)->get($endpoint);
-                
-                if ($response->successful()) {
-                    $data = $response->json();
-                    
-                    // Assume API returns array of URLs
-                    if (is_array($data)) {
-                        $this->urls = array_merge($this->urls, $data);
-                        
-                        if ($this->logProcess) {
-                            Log::info("Added URLs from {$endpoint}", ['count' => count($data)]);
-                        }
-                    } else {
-                        if ($this->logProcess) {
-                            Log::warning("API response is not an array", ['endpoint' => $endpoint]);
+
+        $existing = TranslationUrl::where('url', $url)->first();
+        if ($existing) {
+            return null;
+        }
+
+        return TranslationUrl::create([
+            'url' => $url,
+            'active' => true,
+            'is_api' => 0,
+        ]);
+    }
+
+    public function addBulk(array $urls): int
+    {
+        $added = 0;
+        foreach ($urls as $url) {
+            if ($this->addUrl($url)) {
+                $added++;
+            }
+        }
+
+        if ($this->logProcess) {
+            Log::info("Bulk added {$added} URLs");
+        }
+
+        return $added;
+    }
+
+    public function addApiEndpoint(string $url): ?TranslationUrl
+    {
+        $url = trim($url);
+        if (empty($url)) {
+            return null;
+        }
+
+        $existing = TranslationUrl::where('url', $url)->first();
+        if ($existing) {
+            return null;
+        }
+
+        return TranslationUrl::create([
+            'url' => $url,
+            'active' => true,
+            'is_api' => 1,
+        ]);
+    }
+
+    public function collectFromApiEndpoint(string $endpoint): int
+    {
+        $endpoint = trim($endpoint);
+        if (empty($endpoint)) {
+            return 0;
+        }
+
+        $this->addApiEndpoint($endpoint);
+        $added = 0;
+
+        try {
+            if ($this->logProcess) {
+                Log::info("Fetching URLs from API: {$endpoint}");
+            }
+
+            $response = Http::timeout(30)->get($endpoint);
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                if (is_array($data)) {
+                    foreach ($data as $url) {
+                        if (is_string($url) && !empty(trim($url))) {
+                            if ($this->addUrl(trim($url))) {
+                                $added++;
+                            }
                         }
                     }
+
+                    if ($this->logProcess) {
+                        Log::info("Collected {$added} new URLs from {$endpoint}");
+                    }
                 } else {
-                    Log::error("API request failed", [
-                        'endpoint' => $endpoint,
-                        'status' => $response->status()
-                    ]);
+                    Log::warning("API response is not an array", ['endpoint' => $endpoint]);
+                }
+            } else {
+                Log::error("API request failed", [
+                    'endpoint' => $endpoint,
+                    'status' => $response->status(),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to collect URLs from {$endpoint}", [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $added;
+    }
+
+    public function collectFromApiEndpoints(array $endpoints): int
+    {
+        $totalAdded = 0;
+        foreach ($endpoints as $endpoint) {
+            $totalAdded += $this->collectFromApiEndpoint($endpoint);
+        }
+        return $totalAdded;
+    }
+
+    public function refreshAllApiEndpoints(): int
+    {
+        $endpoints = TranslationUrl::apiEndpoints()->active()->pluck('url')->toArray();
+        $totalAdded = 0;
+
+        foreach ($endpoints as $endpoint) {
+            try {
+                $response = Http::timeout(30)->get($endpoint);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    if (is_array($data)) {
+                        foreach ($data as $url) {
+                            if (is_string($url) && !empty(trim($url))) {
+                                if ($this->addUrl(trim($url))) {
+                                    $totalAdded++;
+                                }
+                            }
+                        }
+                    }
                 }
             } catch (\Exception $e) {
-                Log::error("Failed to collect URLs from {$endpoint}", [
-                    'error' => $e->getMessage()
+                Log::error("Failed to refresh from {$endpoint}", [
+                    'error' => $e->getMessage(),
                 ]);
             }
         }
-        
-        return $this->urls;
-    }
-    
-    public function addStaticUrls(array $staticUrls): void
-    {
+
         if ($this->logProcess) {
-            Log::info("Adding static URLs", ['count' => count($staticUrls)]);
+            Log::info("Refreshed API endpoints, added {$totalAdded} new URLs");
         }
-        $this->urls = array_merge($this->urls, $staticUrls);
+
+        return $totalAdded;
     }
-    
-    public function addManualUrls(array $manualUrls): void
+
+    public function getExtractableUrls(): array
     {
-        if ($this->logProcess) {
-            Log::info("Adding manual URLs", ['count' => count($manualUrls)]);
-        }
-        $this->urls = array_merge($this->urls, $manualUrls);
+        return TranslationUrl::extractable()->pluck('url')->toArray();
     }
-    
-    public function getUniqueUrls(): array
+
+    public function getExtractableCount(): int
     {
-        return array_unique($this->urls);
+        return TranslationUrl::extractable()->count();
     }
-    
-    public function saveToConfig(): int
+
+    public function removeById(int $id): bool
     {
-        $urls = $this->getUniqueUrls();
-        
-        if ($this->logProcess) {
-            Log::info("Saving URLs to config", ['total' => count($urls)]);
-        }
-        
-        $data = [
-            'static' => [],
-            'dynamic' => [],
-            'manual' => [],
-            'all' => $urls,
-            'generated_at' => now()->toIso8601String(),
-            'total' => count($urls),
-        ];
-        
-        $path = config_path('urls.json');
-        file_put_contents(
-            $path,
-            json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
-        );
-        
-        if ($this->logProcess) {
-            Log::info("URLs saved to {$path}");
-        }
-        
-        return count($urls);
+        return (bool) TranslationUrl::destroy($id);
     }
-    
-    public function loadFromConfig(): array
+
+    public function toggleActive(int $id): bool
     {
-        $path = config_path('urls.json');
-        
-        if (!file_exists($path)) {
-            if ($this->logProcess) {
-                Log::warning("URLs config file not found: {$path}");
-            }
-            return [];
-        }
-        
-        $data = json_decode(file_get_contents($path), true);
-        $urls = $data['all'] ?? [];
-        
-        if ($this->logProcess) {
-            Log::info("Loaded URLs from config", ['count' => count($urls)]);
-        }
-        
-        return $urls;
+        $record = TranslationUrl::find($id);
+        if (!$record) return false;
+        $record->active = !$record->active;
+        $record->save();
+        return true;
+    }
+
+    public function clearRegularUrls(): void
+    {
+        TranslationUrl::regularUrls()->delete();
+    }
+
+    public function clearApiEndpoints(): void
+    {
+        TranslationUrl::apiEndpoints()->delete();
+    }
+
+    public function clearAll(): void
+    {
+        TranslationUrl::truncate();
     }
 }
