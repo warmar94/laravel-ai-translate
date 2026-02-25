@@ -86,6 +86,7 @@ return [
         'delay_between_requests' => 1, // seconds
         'batch_size' => 50,
         'timeout' => 20,
+        'api_scan_internal' => true, // Use internal requests for local API endpoints
     ],
     
     /*

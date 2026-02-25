@@ -77,6 +77,7 @@ class URLCollector
         }
 
         $this->addApiEndpoint($endpoint);
+
         $added = 0;
 
         try {
@@ -84,31 +85,20 @@ class URLCollector
                 Log::info("Fetching URLs from API: {$endpoint}");
             }
 
-            $response = Http::timeout(30)->get($endpoint);
+            $data = $this->fetchUrlsFromEndpoint($endpoint);
 
-            if ($response->successful()) {
-                $data = $response->json();
-
-                if (is_array($data)) {
-                    foreach ($data as $url) {
-                        if (is_string($url) && !empty(trim($url))) {
-                            if ($this->addUrl(trim($url))) {
-                                $added++;
-                            }
+            if (!empty($data)) {
+                foreach ($data as $url) {
+                    if (is_string($url) && !empty(trim($url))) {
+                        if ($this->addUrl(trim($url))) {
+                            $added++;
                         }
                     }
-
-                    if ($this->logProcess) {
-                        Log::info("Collected {$added} new URLs from {$endpoint}");
-                    }
-                } else {
-                    Log::warning("API response is not an array", ['endpoint' => $endpoint]);
                 }
-            } else {
-                Log::error("API request failed", [
-                    'endpoint' => $endpoint,
-                    'status' => $response->status(),
-                ]);
+
+                if ($this->logProcess) {
+                    Log::info("Collected {$added} new URLs from {$endpoint}");
+                }
             }
         } catch (\Exception $e) {
             Log::error("Failed to collect URLs from {$endpoint}", [
@@ -135,17 +125,12 @@ class URLCollector
 
         foreach ($endpoints as $endpoint) {
             try {
-                $response = Http::timeout(30)->get($endpoint);
+                $data = $this->fetchUrlsFromEndpoint($endpoint);
 
-                if ($response->successful()) {
-                    $data = $response->json();
-                    if (is_array($data)) {
-                        foreach ($data as $url) {
-                            if (is_string($url) && !empty(trim($url))) {
-                                if ($this->addUrl(trim($url))) {
-                                    $totalAdded++;
-                                }
-                            }
+                foreach ($data as $url) {
+                    if (is_string($url) && !empty(trim($url))) {
+                        if ($this->addUrl(trim($url))) {
+                            $totalAdded++;
                         }
                     }
                 }
@@ -182,6 +167,7 @@ class URLCollector
     {
         $record = TranslationUrl::find($id);
         if (!$record) return false;
+
         $record->active = !$record->active;
         $record->save();
         return true;
@@ -200,5 +186,54 @@ class URLCollector
     public function clearAll(): void
     {
         TranslationUrl::truncate();
+    }
+
+    /**
+     * Fetch URLs from an API endpoint.
+     * Uses internal Laravel request for local URLs to avoid deadlock
+     * on single-threaded dev servers (php artisan serve).
+     */
+    private function fetchUrlsFromEndpoint(string $url): array
+    {
+        if (config('translation.urls.api_scan_internal') && $this->isLocalUrl($url)) {
+            if ($this->logProcess) {
+                Log::info("Using internal request for local endpoint: {$url}");
+            }
+
+            $path = parse_url($url, PHP_URL_PATH);
+            $query = parse_url($url, PHP_URL_QUERY);
+            $uri = $query ? "$path?$query" : $path;
+
+            $response = app()->handle(
+                \Illuminate\Http\Request::create($uri, 'GET')
+            );
+
+            $data = json_decode($response->getContent(), true);
+
+            return is_array($data) ? $data : [];
+        }
+
+        $response = Http::timeout(config('translation.urls.timeout', 20))->get($url);
+
+        if (!$response->successful()) {
+            Log::error("API request failed", [
+                'endpoint' => $url,
+                'status' => $response->status(),
+            ]);
+            return [];
+        }
+
+        $data = $response->json();
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Check if a URL points to the local dev server.
+     */
+    private function isLocalUrl(string $url): bool
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        return in_array($host, ['127.0.0.1', 'localhost', '::1']);
     }
 }
