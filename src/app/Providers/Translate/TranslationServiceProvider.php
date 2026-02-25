@@ -22,11 +22,9 @@ class TranslationServiceProvider extends ServiceProvider
     {
         // Translation collection mode - Blade directive
         Blade::directive('__t', function ($expression) {
-            return "<?php if(isCollectionMode()): ?>" .
-                "<?php echo '<!--T_START:' . htmlspecialchars(__({$expression}), ENT_QUOTES, 'UTF-8') . ':T_END-->' . __({$expression}); ?>" .
-                "<?php else: ?>" .
-                "<?php echo __({$expression}); ?>" .
-                "<?php endif; ?>";
+            return "<?php echo isCollectionMode() 
+                ? '<!--T_START:' . htmlspecialchars(__({$expression}), ENT_QUOTES, 'UTF-8') . ':T_END-->' . __({$expression})
+                : __({$expression}); ?>";
         });
     }
 }
