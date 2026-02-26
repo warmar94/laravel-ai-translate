@@ -3,7 +3,6 @@
 namespace App\Providers\Translate;
 
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Log;
 use App\Models\Translate\MissingTranslation;
@@ -17,14 +16,23 @@ class TranslationServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-
         Lang::handleMissingKeysUsing(function (string $key, array $replace, ?string $locale, bool $fallbackUsed) {
-
             $locale = $locale ?? app()->getLocale();
             $sourceLocale = config('translation.source_locale', 'en');
 
             // Skip empty keys
             if (trim($key) === '') {
+                return $key;
+            }
+
+            // Skip keys containing path separators (file path resolution artifacts)
+            if (str_contains($key, '\\') || str_contains($key, '/')) {
+                return $key;
+            }
+
+            // Skip bare Laravel group names (resolved before dot-notation)
+            $skipGroups = ['auth', 'pagination', 'passwords', 'validation', 'http-statuses'];
+            if (in_array($key, $skipGroups, true)) {
                 return $key;
             }
 
@@ -68,7 +76,7 @@ class TranslationServiceProvider extends ServiceProvider
                 return $key;
             }
 
-            // Target language → record in translations_missing table
+            // Target language → record in missing_translations table
             try {
                 MissingTranslation::record($key, $locale);
             } catch (\Throwable $e) {
