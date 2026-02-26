@@ -96,7 +96,8 @@ return [
     */
     'extraction' => [
         'scan_internal' => true, // Use internal Laravel requests
-        'clear_cache' => true,   // Clear view cache before scanning
+        'clear_cache' => false,   // Clear view cache before scanning (only for testing)
+        'runtime_collection' => false, // Collect missing keys from live traffic (false = only during active scans)
     ],
     
     /*
