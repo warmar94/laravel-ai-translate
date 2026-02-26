@@ -11,7 +11,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - ✅ Automatic language-prefixed routing (`/about`, `/ar/about`)
 - ✅ Smart language detection middleware
 - ✅ AI-powered translation with OpenAI
-- ✅ **Dual string collection** — active URL scanning + passive detection via Laravel's `handleMissingKeysUsing`
+- ✅ **Dual string collection** — active URL scanning + passive runtime detection via Laravel's `handleMissingKeysUsing`, with configurable `runtime_collection` toggle
 - ✅ Real-time translation dashboard with live progress tracking
 - ✅ **Missing Keys dashboard** — auto-detected untranslated strings from live traffic with per-locale tracking
 - ✅ Complete SEO implementation (hreflang, canonical URLs)
@@ -27,7 +27,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 ### 🎯 Core Translation Features
 
 - 🤖 **AI-Powered Translations**: Leverages OpenAI GPT-4 for context-aware, high-quality translations
-- 🔍 **Dual String Collection**: Active URL scanning + passive detection via Laravel's native `handleMissingKeysUsing` hook — new strings are caught automatically from live traffic without any extra work
+- 🔍 **Dual String Collection**: Active URL scanning + passive detection via Laravel's native `handleMissingKeysUsing` hook — new strings are caught automatically from live traffic. A configurable `runtime_collection` flag controls whether passive collection runs on every request or only during active scans, giving you full control over production overhead
 - 🌐 **Multi-Language Support**: Translate your entire application into unlimited languages
 - 📊 **Real-Time Dashboard**: Beautiful Livewire-powered interface with live progress tracking
 - ⚡ **Queue-Based Processing**: Scalable batch processing for thousands of strings
@@ -321,13 +321,15 @@ Copy the following files to your Laravel application:
 - `app/Models/Translate/MissingTranslation.php`
 
 **Services:**
+- `app/Services/Translate/AITranslator.php`
+- `app/Services/Translate/MissingKeyBufferService.php`
 - `app/Services/Translate/StringExtractor.php`
 - `app/Services/Translate/URLCollector.php`
-- `app/Services/Translate/AITranslator.php`
 
 **Jobs:**
 - `app/Jobs/Translate/ScanUrlForStringsJob.php`
 - `app/Jobs/Translate/TranslateStringBatchJob.php`
+- `app/Jobs/Translate/ProcessMissingKeysJob.php`
 
 **Middleware:**
 - `app/Http/Middleware/Translate/LanguageMiddleware.php`
@@ -367,7 +369,8 @@ your-laravel-app/
 │   ├── Jobs/
 │   │   └── Translate/
 │   │       ├── ScanUrlForStringsJob.php            # Visits URLs to trigger string collection
-│   │       └── TranslateStringBatchJob.php         # Translates string batches via AI
+│   │       ├── TranslateStringBatchJob.php         # Translates string batches via AI
+│   │       └── ProcessMissingKeysJob.php           # Writes buffered missing keys to JSON/DB
 │   │
 │   ├── Livewire/
 │   │   └── Translate/
@@ -386,7 +389,8 @@ your-laravel-app/
 │   └── Services/
 │       └── Translate/
 │           ├── AITranslator.php                    # OpenAI API integration
-│           ├── StringExtractor.php                 # Internal URL scanning
+│           ├── MissingKeyBufferService.php         # Request-scoped in-memory key buffer
+│           ├── StringExtractor.php                 # Internal URL scanning with collectionMode flag
 │           └── URLCollector.php                    # Database-backed URL collection & API fetching
 │
 ├── config/
@@ -777,6 +781,7 @@ return [
     'extraction' => [
         'scan_internal' => true,
         'clear_cache' => false,
+        'runtime_collection' => false, // true = collect from all live traffic; false = active scans only
     ],
     
     // AI translation settings
@@ -793,7 +798,7 @@ return [
 ];
 ```
 
-> **Note:** Only `OPENAI_API_KEY` and `OPENAI_MODEL` use `.env` variables. All other settings like `log_process`, `delay_between_requests`, and `batch_size` are configured directly in this file. The `api_scan_internal` option ensures local API endpoints (127.0.0.1, localhost) are fetched via internal Laravel requests to avoid deadlock on single-threaded dev servers like `php artisan serve`.
+> **Note:** Only `OPENAI_API_KEY` and `OPENAI_MODEL` use `.env` variables. All other settings like `log_process`, `delay_between_requests`, and `batch_size` are configured directly in this file. The `api_scan_internal` option ensures local API endpoints (127.0.0.1, localhost) are fetched via internal Laravel requests to avoid deadlock on single-threaded dev servers like `php artisan serve`. The `runtime_collection` option controls whether the missing key handler buffers keys from all live traffic (`true`) or only during active URL scans (`false`, recommended for production).
 
 ### Adding New Languages
 
@@ -1004,9 +1009,9 @@ The dashboard has a tabbed interface. In the **URLs** tab:
 3. Monitor the real-time progress bar
 4. That's it! String collection is fully automatic — jobs visit each URL internally, and every `__()` call in your templates triggers the `handleMissingKeysUsing` hook which saves new strings to `en.json`.
 
-> **How it works:** When you click "Collect Strings", the system dispatches queue jobs that visit each URL via `app()->handle()`. As each page renders, every `__()` call that doesn't find a matching key triggers the missing key handler, which automatically adds the string to `en.json`. No HTML markers, no regex, no custom directives — just Laravel's own translator doing the work. See [How It Works](#how-it-works) for details.
+> **How it works:** When you click "Collect Strings", the system dispatches `ScanUrlForStringsJob` queue jobs — one per URL. Each job sets `StringExtractor::$collectionMode = true`, visits the page via `app()->handle()`, then resets the flag in a `finally` block. As each page renders, every `__()` call that doesn't find a matching key is buffered in `MissingKeyBufferService`. After the internal request finishes, a single `ProcessMissingKeysJob` is dispatched to write the buffered keys to `en.json` (with `flock` for safety) and upsert target-locale keys into the database. No HTML markers, no regex — just Laravel's own translator doing the work. See [How It Works](#how-it-works) for details.
 
-> **Passive collection also works:** Even without clicking "Collect Strings", any user visiting your site will trigger string collection for any untranslated strings. The active scan is useful for an initial full sweep or after major template changes.
+> **Passive collection also works:** If `runtime_collection = true` in config, any user visiting your site will also trigger key buffering and dispatch for any untranslated strings — without clicking "Collect Strings". The active scan is useful for an initial full sweep or after major template changes, and works regardless of the `runtime_collection` setting.
 
 ### Step 5: Translate All Keys
 
@@ -1054,84 +1059,101 @@ The system works with Laravel's standard `__()` translation function — no cust
 
 The system uses **two complementary approaches** for collecting translatable strings:
 
-#### 1. Passive Collection via `handleMissingKeysUsing` (always active)
+#### 1. Passive Collection via `handleMissingKeysUsing` (configurable)
 
-Laravel's `Translator` class has a `handleMissingKeysUsing` method that fires a callback whenever `__()` can't find a translation key. The `TranslationServiceProvider` hooks into this:
+Laravel's `Translator` class has a `handleMissingKeysUsing` method that fires a callback whenever `__()` can't find a translation key. The `TranslationServiceProvider` hooks into this, but instead of writing to disk during the request, it buffers all missing keys in memory via the `MissingKeyBufferService` singleton — then dispatches a single `ProcessMissingKeysJob` **after the response is sent**.
+
+**Collection is gated by two flags:**
+
+- `runtime_collection` (config) — set to `true` to collect from all live user traffic; `false` to only collect during active URL scans
+- `StringExtractor::$collectionMode` (static) — automatically set to `true` by `ScanUrlForStringsJob` during dashboard scans
 
 ```php
-Lang::handleMissingKeysUsing(function (string $key, array $replace, ?string $locale, bool $fallbackUsed) {
-    $locale = $locale ?? app()->getLocale();
-    $sourceLocale = config('translation.source_locale', 'en');
+// TranslationServiceProvider.php (simplified)
+Lang::handleMissingKeysUsing(function (string $key, ...) use ($buffer) {
+    $runtimeCollection = config('translation.extraction.runtime_collection', false);
 
-    // Skip Laravel internals (validation.required, pagination.next, etc.)
-    if (str_starts_with($key, 'validation.') || 
-        str_starts_with($key, 'pagination.') || 
-        str_starts_with($key, 'passwords.') || 
-        str_starts_with($key, 'auth.')) {
+    // Gate: skip if neither runtime collection nor active scan is enabled
+    if (!$runtimeCollection && !StringExtractor::$collectionMode) {
         return $key;
     }
 
-    // Skip dot-notation group keys (e.g., "messages.welcome")
-    if (preg_match('/^[a-z_]+\.[a-z_]+/i', $key) && !str_contains($key, ' ')) {
-        return $key;
-    }
+    // Filter Laravel internals (validation.*, pagination.*, etc.)
+    // Filter dot-notation group keys (e.g., "messages.welcome")
+    // ...
 
     if ($locale === $sourceLocale) {
-        // Source language → add directly to en.json
-        $path = lang_path("{$sourceLocale}.json");
-        $translations = file_exists($path) ? json_decode(file_get_contents($path), true) ?? [] : [];
-        if (!array_key_exists($key, $translations)) {
-            $translations[$key] = $key;
-            ksort($translations);
-            file_put_contents($path, json_encode($translations, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        }
-        return $key;
+        $buffer->addSourceKey($key);   // → en.json via ProcessMissingKeysJob
+    } else {
+        $buffer->addTargetKey($key, $locale);  // → translations_missing table
     }
 
-    // Target language → log to translations_missing table
-    MissingTranslation::record($key, $locale);
     return $key;
+});
+
+// After response is sent — dispatch one job with all buffered keys
+$this->app->terminating(function () use ($buffer) {
+    if ($buffer->hasKeys()) {
+        ProcessMissingKeysJob::dispatch(
+            $buffer->getSourceKeys(),
+            $buffer->getTargetKeys(),
+            config('translation.source_locale', 'en')
+        );
+        $buffer->flush();
+    }
 });
 ```
 
+**Why buffering?**
+
+- **Zero I/O during the request** — no file writes or DB queries while the user is waiting
+- **One job per request** — not one job per missing key; far more efficient under load
+- **Race condition safety** — `ProcessMissingKeysJob` uses `flock(LOCK_EX)` when writing to `en.json`, so concurrent queue workers never corrupt the file
+- **Silent failure** — if the job dispatch fails, the user is completely unaffected
+
 This means:
 
-- **Source locale (en):** Any `__('new string')` that isn't in `en.json` gets added automatically — no scanning needed
-- **Target locales (ar, es, etc.):** Missing translations are logged to the `translations_missing` table with occurrence counts, so you can see exactly what needs translating and how often it's requested
+- **Source locale (en):** Any `__('new string')` that isn't in `en.json` gets added automatically after the request — no scanning needed
+- **Target locales (ar, es, etc.):** Missing translations are upserted into the `translations_missing` table with occurrence counts, so you can see exactly what needs translating and how often
 - **Zero overhead for existing translations:** The callback only fires when a key is actually missing. Translated strings go through Laravel's normal fast path
-- **No custom syntax required:** Standard `__()` works everywhere — Blade templates, controllers, Livewire components, middleware, etc.
-- **Laravel internals are filtered out:** The hook skips `validation.*`, `pagination.*`, `passwords.*`, `auth.*` and dot-notation group keys so they don't pollute your translation files
+- **Laravel internals are filtered out:** The hook skips `validation.*`, `pagination.*`, `passwords.*`, `auth.*`, dot-notation group keys, and file path artifacts so they never pollute your translation files
 
 #### 2. Active Scanning via URL Visits (on-demand)
 
 When you click "Collect Strings" in the dashboard:
 
-1. Queue jobs visit each URL internally via `app()->handle()`
-2. The page renders — every `__()` call throughout your templates fires the translator
-3. The missing key handler catches any new strings and adds them to `en.json`
-4. No HTML markers, no regex parsing, no collection mode flags — just Laravel's own translator doing the work
-
-The `StringExtractor` is now very simple:
+1. Queue jobs (`ScanUrlForStringsJob`) visit each URL internally via `app()->handle()`
+2. `StringExtractor::$collectionMode` is set to `true` before the page renders, and reset in a `finally` block after
+3. The page renders — every `__()` call throughout your templates fires the translator
+4. The missing key handler buffers any new strings via `MissingKeyBufferService`
+5. After the internal request completes, the terminating callback dispatches `ProcessMissingKeysJob` which writes to `en.json` and the DB
+6. No HTML markers, no regex parsing — just Laravel's own translator doing the work
 
 ```php
+// StringExtractor.php (simplified)
 public function extractFromUrl(string $url): void
 {
-    $parsedUrl = parse_url($url);
-    $path = $parsedUrl['path'] ?? '/';
-    $query = $parsedUrl['query'] ?? '';
-    if ($query) $path .= '?' . $query;
+    try {
+        self::$collectionMode = true;
 
-    $request = \Illuminate\Http\Request::create($path, 'GET');
-    app()->handle($request); // Missing key handler does the work
+        $request = \Illuminate\Http\Request::create($path, 'GET');
+        app()->handle($request); // missing key handler buffers all __() calls
+
+    } finally {
+        // Always reset — even if the page render throws
+        self::$collectionMode = false;
+    }
 }
 ```
 
-It returns `void` — it doesn't extract or return anything. It just visits the page, and the `handleMissingKeysUsing` hook handles everything.
+The `collectionMode` flag is `static` so it's shared across the entire process. The `finally` block guarantees it's always reset, even on exception.
 
 This active scan is useful for:
 - **Initial setup** — sweep all pages at once to populate `en.json`
 - **After major template changes** — catch all new strings across the site
 - **Catching strings in unvisited pages** — pages that haven't had real user traffic yet
+
+> **`runtime_collection` vs active scan:** If `runtime_collection = false` (recommended for production), the missing key hook is a no-op during normal requests — zero overhead. It only activates during active scans triggered by `ScanUrlForStringsJob`. If `runtime_collection = true`, missing keys are buffered and dispatched on every request where a key is missing.
 
 ### Translation Process
 
@@ -1366,11 +1388,13 @@ The **Missing Keys** tab provides real-time visibility into untranslated strings
    App\Providers\Translate\TranslationServiceProvider::class,
    ```
 
-2. **Test passive collection manually:**
+2. **Test passive collection manually** (requires `runtime_collection = true` or an active scan):
    ```bash
    php artisan tinker
    >>> __('test string that does not exist yet')
-   # Now check if it appeared in lang/en.json
+   # The key is buffered in MissingKeyBufferService and dispatched via ProcessMissingKeysJob
+   # after the terminating callback fires. Check en.json after the job runs:
+   >>> \App\Jobs\Translate\ProcessMissingKeysJob::dispatchSync(['test string that does not exist yet'], [], 'en')
    ```
 
 3. **Enable debug logging** in `config/translation.php`:
