@@ -1,4 +1,4 @@
--- translation_urls
+-- translation_urls: Stores all URLs for string extraction and saved API endpoints
 CREATE TABLE `translation_urls` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `url` TEXT NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE `translation_urls` (
     INDEX `translation_urls_active_is_api_index` (`active`, `is_api`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- translation_progress
+-- translation_progress: Tracks extraction and translation job progress
 CREATE TABLE `translation_progress` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `type` ENUM('string_extraction', 'translation') NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE `translation_progress` (
     UNIQUE KEY `translation_progress_type_locale_unique` (`type`, `locale`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- missing_translations
+-- missing_translations: Tracks missing translation keys detected from live traffic
 CREATE TABLE `missing_translations` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `key` VARCHAR(500) NOT NULL,
