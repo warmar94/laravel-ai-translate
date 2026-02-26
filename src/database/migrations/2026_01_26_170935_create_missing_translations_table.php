@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('translations_missing', function (Blueprint $table) {
+        Schema::create('translation_missing', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('key', 500);
             $table->string('locale', 10)->default('en');
@@ -23,6 +23,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('translations_missing');
+        Schema::dropIfExists('translation_missing');
     }
 };

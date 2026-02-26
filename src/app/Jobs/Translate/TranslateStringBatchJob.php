@@ -11,6 +11,16 @@ use App\Services\Translate\AITranslator;
 use App\Models\Translate\TranslationProgress;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Translates a batch of strings to a target locale via OpenAI.
+ *
+ * Dispatched from the dashboard "Translate All Keys" action.
+ * Each job handles one batch (configurable size, default 20 strings)
+ * for one target locale. Skips strings that are already translated.
+ *
+ * Writes translated strings directly to lang/{locale}.json and
+ * updates the TranslationProgress model for real-time dashboard display.
+ */
 class TranslateStringBatchJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -32,6 +42,7 @@ class TranslateStringBatchJob implements ShouldQueue
         try {
             $filePath = lang_path("{$this->targetLocale}.json");
 
+            // Load existing translations
             $existing = [];
             if (file_exists($filePath)) {
                 $existing = json_decode(file_get_contents($filePath), true) ?? [];
@@ -40,7 +51,7 @@ class TranslateStringBatchJob implements ShouldQueue
             $translatedCount = 0;
 
             foreach ($this->strings as $key => $sourceText) {
-                // Skip if already translated
+                // Skip if already translated (value differs from key)
                 if (isset($existing[$key]) && $existing[$key] !== $key) {
                     continue;
                 }
@@ -52,9 +63,11 @@ class TranslateStringBatchJob implements ShouldQueue
                     $translatedCount++;
                 }
 
-                usleep(100000); // 0.1s rate limit buffer
+                // Small delay between API calls to respect rate limits
+                usleep(100000); // 0.1s
             }
 
+            // Write back if we translated anything
             if ($translatedCount > 0) {
                 ksort($existing);
 
@@ -68,7 +81,7 @@ class TranslateStringBatchJob implements ShouldQueue
                 }
             }
 
-            // Update progress
+            // Update progress for dashboard display
             $progress = TranslationProgress::translation()
                 ->forLocale($this->targetLocale)
                 ->first();

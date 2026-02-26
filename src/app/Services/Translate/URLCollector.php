@@ -6,6 +6,20 @@ use App\Models\Translate\TranslationUrl;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Manages the translation_urls table — adding, removing, and
+ * fetching URLs for string extraction.
+ *
+ * Two types of URLs:
+ *   is_api = 0 → Regular URLs that get scanned for __() strings
+ *   is_api = 1 → API endpoints that return JSON arrays of URLs
+ *
+ * API endpoints are never scanned directly — they're fetched to
+ * discover regular URLs which are then added to the table.
+ *
+ * Local API endpoints (localhost, 127.0.0.1) can be fetched via
+ * internal Laravel requests to avoid php artisan serve deadlock.
+ */
 class URLCollector
 {
     protected $logProcess = false;
@@ -15,6 +29,9 @@ class URLCollector
         $this->logProcess = config('translation.log_process', false);
     }
 
+    /**
+     * Add a single regular URL. Returns null if duplicate or empty.
+     */
     public function addUrl(string $url): ?TranslationUrl
     {
         $url = trim($url);
@@ -34,6 +51,9 @@ class URLCollector
         ]);
     }
 
+    /**
+     * Add multiple URLs at once. Returns count of new URLs added.
+     */
     public function addBulk(array $urls): int
     {
         $added = 0;
@@ -50,6 +70,9 @@ class URLCollector
         return $added;
     }
 
+    /**
+     * Save an API endpoint (is_api = 1). Returns null if duplicate.
+     */
     public function addApiEndpoint(string $url): ?TranslationUrl
     {
         $url = trim($url);
@@ -69,6 +92,10 @@ class URLCollector
         ]);
     }
 
+    /**
+     * Fetch a single API endpoint and import its URLs.
+     * Saves the endpoint itself (is_api=1) and all returned URLs (is_api=0).
+     */
     public function collectFromApiEndpoint(string $endpoint): int
     {
         $endpoint = trim($endpoint);
@@ -109,6 +136,9 @@ class URLCollector
         return $added;
     }
 
+    /**
+     * Fetch multiple API endpoints and import all their URLs.
+     */
     public function collectFromApiEndpoints(array $endpoints): int
     {
         $totalAdded = 0;
@@ -118,6 +148,9 @@ class URLCollector
         return $totalAdded;
     }
 
+    /**
+     * Re-fetch all saved API endpoints to discover new content.
+     */
     public function refreshAllApiEndpoints(): int
     {
         $endpoints = TranslationUrl::apiEndpoints()->active()->pluck('url')->toArray();
@@ -148,11 +181,17 @@ class URLCollector
         return $totalAdded;
     }
 
+    /**
+     * Get all extractable URLs (active, non-API).
+     */
     public function getExtractableUrls(): array
     {
         return TranslationUrl::extractable()->pluck('url')->toArray();
     }
 
+    /**
+     * Get count of extractable URLs.
+     */
     public function getExtractableCount(): int
     {
         return TranslationUrl::extractable()->count();
@@ -190,8 +229,10 @@ class URLCollector
 
     /**
      * Fetch URLs from an API endpoint.
-     * Uses internal Laravel request for local URLs to avoid deadlock
-     * on single-threaded dev servers (php artisan serve).
+     *
+     * When api_scan_internal is enabled and the endpoint is local,
+     * uses app()->handle() instead of HTTP to avoid the single-threaded
+     * php artisan serve deadlock.
      */
     private function fetchUrlsFromEndpoint(string $url): array
     {
@@ -213,6 +254,7 @@ class URLCollector
             return is_array($data) ? $data : [];
         }
 
+        // External endpoint — use HTTP client
         $response = Http::timeout(config('translation.urls.timeout', 20))->get($url);
 
         if (!$response->successful()) {

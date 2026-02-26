@@ -6,6 +6,15 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Translates strings via OpenAI's Chat Completions API.
+ *
+ * Features:
+ *   - Per-minute rate limiting via Laravel's RateLimiter
+ *   - Configurable model, prompt, and API key
+ *   - Single and batch translation methods
+ *   - Language name resolution for natural AI prompts
+ */
 class AITranslator
 {
     protected ?string $apiKey;
@@ -23,6 +32,10 @@ class AITranslator
         $this->logProcess = config('translation.log_process', false);
     }
 
+    /**
+     * Translate a single string to the target locale.
+     * Returns null if rate limited, not configured, or API error.
+     */
     public function translate(string $text, string $targetLocale): ?string
     {
         if (!$this->apiKey) {
@@ -42,6 +55,9 @@ class AITranslator
         );
     }
 
+    /**
+     * Call OpenAI Chat Completions API.
+     */
     protected function callOpenAI(string $text, string $targetLocale): ?string
     {
         try {
@@ -93,11 +109,17 @@ class AITranslator
         }
     }
 
+    /**
+     * Resolve locale code to full language name for the AI prompt.
+     */
     protected function getLanguageName(string $locale): string
     {
         return $this->languages[$locale] ?? $locale;
     }
 
+    /**
+     * Translate multiple strings. Returns only successful translations.
+     */
     public function translateBatch(array $texts, string $targetLocale): array
     {
         $translations = [];
@@ -113,16 +135,25 @@ class AITranslator
         return $translations;
     }
 
+    /**
+     * Get all configured languages.
+     */
     public function getAvailableLanguages(): array
     {
         return $this->languages;
     }
 
+    /**
+     * Get target locale codes (excludes source language).
+     */
     public function getTargetLocales(): array
     {
         return config('translation.target_locales', []);
     }
 
+    /**
+     * Check if the OpenAI API key is configured.
+     */
     public function isConfigured(): bool
     {
         return !empty($this->apiKey);

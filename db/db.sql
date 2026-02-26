@@ -28,7 +28,7 @@ CREATE TABLE `translation_progress` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- translations_missing: Tracks missing translation keys detected from live traffic
-CREATE TABLE `translations_missing` (
+CREATE TABLE `translation_missing` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `key` VARCHAR(500) NOT NULL,
     `locale` VARCHAR(10) NOT NULL DEFAULT 'en',

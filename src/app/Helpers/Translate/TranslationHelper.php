@@ -2,16 +2,22 @@
 
 /*
 |--------------------------------------------------------------------------
-| Translation related helper functions
+| Translation Helper Functions
 |--------------------------------------------------------------------------
 |
-| Helper functions and code to expose varaibles and data
-| to frontend files (instead of View::share)
+| Global helpers for the translation system. Registered via
+| composer.json autoload "files" directive.
+|
+| Available everywhere: Blade templates, controllers, services.
 |
 */
 
 use Illuminate\Support\Facades\Route;
 
+/**
+ * Get the current locale code.
+ * Usage: {{ langCode() }} → "en", "ar", "es"
+ */
 if (!function_exists('langCode')) {
     function langCode(): string
     {
@@ -19,6 +25,10 @@ if (!function_exists('langCode')) {
     }
 }
 
+/**
+ * Check if the current locale is a right-to-left language.
+ * Usage: @if(isRtl()) <div dir="rtl">...</div> @endif
+ */
 if (!function_exists('isRtl')) {
     function isRtl(): bool
     {
@@ -26,6 +36,14 @@ if (!function_exists('isRtl')) {
     }
 }
 
+/**
+ * Generate a language-prefixed URL for a named route.
+ * English (source) routes have no prefix, others get /{lang}/...
+ *
+ * Usage: <a href="{{ langUrl('about') }}">About</a>
+ *   en → /about
+ *   ar → /ar/about
+ */
 if (!function_exists('langUrl')) {
     function langUrl(string $routeName, array $params = []): string
     {
@@ -37,6 +55,13 @@ if (!function_exists('langUrl')) {
     }
 }
 
+/**
+ * Check if the current route matches a given name,
+ * accounting for language-prefixed route variants.
+ *
+ * Usage: @if(isRoute('about')) <li class="active">About</li> @endif
+ * Matches: "about", "ar.about", "es.about", etc.
+ */
 if (!function_exists('isRoute')) {
     function isRoute(string $routeName): bool
     {
@@ -54,5 +79,19 @@ if (!function_exists('isRoute')) {
         }
 
         return false;
+    }
+}
+
+/**
+ * Check if the string extractor is currently in collection mode.
+ * True only during active URL scans (ScanUrlForStringsJob).
+ *
+ * Usage: Primarily internal — used by TranslationServiceProvider
+ * to gate key collection when runtime_collection is disabled.
+ */
+if (!function_exists('isCollectionMode')) {
+    function isCollectionMode(): bool
+    {
+        return \App\Services\Translate\StringExtractor::$collectionMode;
     }
 }

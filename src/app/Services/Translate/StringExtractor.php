@@ -4,8 +4,27 @@ namespace App\Services\Translate;
 
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Visits URLs internally to trigger Laravel's translator.
+ *
+ * When extractFromUrl() is called (via ScanUrlForStringsJob),
+ * it sets $collectionMode = true so the handleMissingKeysUsing
+ * hook in TranslationServiceProvider collects keys — even when
+ * runtime_collection is disabled in config.
+ *
+ * The $collectionMode flag is static so it's shared across the
+ * entire process. It's wrapped in a try/finally to guarantee
+ * cleanup even if the page render throws an exception.
+ */
 class StringExtractor
 {
+    /**
+     * Static flag: true during active URL scans, false otherwise.
+     * Checked by TranslationServiceProvider to gate key collection
+     * when runtime_collection is disabled.
+     */
+    public static bool $collectionMode = false;
+
     protected array $languageFiles;
     protected bool $logProcess = false;
 
@@ -16,8 +35,12 @@ class StringExtractor
     }
 
     /**
-     * Visit a URL internally. Laravel's missing key handler
-     * in TranslationServiceProvider collects the strings.
+     * Visit a URL internally via app()->handle().
+     *
+     * Enables collectionMode so the missing key handler buffers
+     * every __() call that doesn't find a translation. The actual
+     * saving happens via ProcessMissingKeysJob dispatched by
+     * the terminating callback in TranslationServiceProvider.
      */
     public function extractFromUrl(string $url): void
     {
@@ -26,6 +49,8 @@ class StringExtractor
         }
 
         try {
+            self::$collectionMode = true;
+
             $parsedUrl = parse_url($url);
             $path = $parsedUrl['path'] ?? '/';
             $query = $parsedUrl['query'] ?? '';
@@ -34,6 +59,7 @@ class StringExtractor
                 $path .= '?' . $query;
             }
 
+            // Internal request — no HTTP, no network, no deadlock
             $request = \Illuminate\Http\Request::create($path, 'GET');
             app()->handle($request);
 
@@ -44,6 +70,9 @@ class StringExtractor
             Log::error("Failed to scan {$url}", [
                 'error' => $e->getMessage(),
             ]);
+        } finally {
+            // Always reset — even if the page render throws
+            self::$collectionMode = false;
         }
     }
 
@@ -63,7 +92,7 @@ class StringExtractor
     }
 
     /**
-     * Get configured language files.
+     * Get configured language file paths.
      */
     public function getLanguageFiles(): array
     {

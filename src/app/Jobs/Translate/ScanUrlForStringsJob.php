@@ -11,6 +11,18 @@ use App\Services\Translate\StringExtractor;
 use App\Models\Translate\TranslationProgress;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Visits a single URL internally to collect translatable strings.
+ *
+ * Dispatched from the dashboard "Collect Strings" action — one job per URL.
+ * The StringExtractor sets collectionMode = true, renders the page via
+ * app()->handle(), which triggers every __() call. The missing key handler
+ * in TranslationServiceProvider buffers the keys, then dispatches a
+ * ProcessMissingKeysJob to do the actual file/DB writes.
+ *
+ * Flow: ScanUrlForStringsJob → StringExtractor → handleMissingKeysUsing
+ *       → MissingKeyBufferService → ProcessMissingKeysJob
+ */
 class ScanUrlForStringsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -29,22 +41,22 @@ class ScanUrlForStringsJob implements ShouldQueue
 
     public function handle(StringExtractor $extractor): void
     {
+        // Rate limit between requests to avoid overwhelming the app
         if ($this->delaySeconds > 0) {
             sleep($this->delaySeconds);
         }
 
         try {
-            $keys = $extractor->extractFromUrl($this->url);
+            // extractFromUrl() sets collectionMode = true, visits the page,
+            // then resets to false in a finally block. The missing key handler
+            // buffers all __() calls and dispatches ProcessMissingKeysJob.
+            $extractor->extractFromUrl($this->url);
 
-            if (!empty($keys)) {
-                $newCount = $extractor->saveToLanguageFile($keys, 'en');
-
-                if ($this->logProcess) {
-                    Log::info("Extracted {$newCount} new keys from {$this->url}");
-                }
+            if ($this->logProcess) {
+                Log::info("Scanned {$this->url}");
             }
 
-            // Update progress
+            // Update extraction progress for dashboard display
             $progress = TranslationProgress::stringExtraction()->first();
 
             if ($progress) {
