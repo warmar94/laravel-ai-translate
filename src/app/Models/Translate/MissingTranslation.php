@@ -7,7 +7,7 @@ class MissingTranslation extends Model
 {
     public $timestamps = false;
 
-    protected $table = 'missing_translations';
+    protected $table = 'translations_missing';
 
     protected $fillable = [
         'key',

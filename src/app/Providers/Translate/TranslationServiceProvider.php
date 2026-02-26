@@ -68,7 +68,7 @@ class TranslationServiceProvider extends ServiceProvider
                 return $key;
             }
 
-            // Target language → record in missing_translations table
+            // Target language → record in translations_missing table
             try {
                 MissingTranslation::record($key, $locale);
             } catch (\Throwable $e) {
