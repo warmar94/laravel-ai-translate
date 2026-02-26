@@ -32,7 +32,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - 📊 **Real-Time Dashboard**: Beautiful Livewire-powered interface with live progress tracking
 - ⚡ **Queue-Based Processing**: Scalable batch processing for thousands of strings
 - 🎯 **Zero Custom Syntax**: Uses Laravel's standard `__()` function — no proprietary directives, no learning curve, templates stay clean and portable
-- 🗃️ **Missing Keys Tracking**: Database-backed `translations_missing` table with occurrence counts, first/last seen timestamps, grouped by locale — automatically populated from live traffic
+- 🗃️ **Missing Keys Tracking**: Database-backed `translation_missing` table with occurrence counts, first/last seen timestamps, grouped by locale — automatically populated from live traffic
 - 🔧 **Local API Deadlock Prevention**: Internal request handling for local API endpoints avoids single-threaded `php artisan serve` deadlock
 
 ### 🔗 URL Management
@@ -246,8 +246,8 @@ CREATE TABLE `translation_progress` (
     UNIQUE KEY `translation_progress_type_locale_unique` (`type`, `locale`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- translations_missing: Tracks missing translation keys detected from live traffic
-CREATE TABLE `translations_missing` (
+-- translation_missing: Tracks missing translation keys detected from live traffic
+CREATE TABLE `translation_missing` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `key` VARCHAR(500) NOT NULL,
     `locale` VARCHAR(10) NOT NULL DEFAULT 'en',
@@ -287,7 +287,7 @@ CREATE TABLE `translations_missing` (
 | `updated_at` | TIMESTAMP | Last progress update |
 | `completed_at` | TIMESTAMP | When processing finished |
 
-**`translations_missing`** — Tracks missing translation keys detected automatically from live traffic via Laravel's `handleMissingKeysUsing` hook.
+**`translation_missing`** — Tracks missing translation keys detected automatically from live traffic via Laravel's `handleMissingKeysUsing` hook.
 
 | Column | Type | Description |
 |---|---|---|
@@ -400,7 +400,7 @@ your-laravel-app/
 │   └── migrations/
 │       ├── create_translation_urls_table.php       # URLs table with indexes
 │       ├── create_translation_progress_table.php   # Progress tracking table
-│       └── create_translations_missing_table.php   # Missing keys tracking table
+│       └── create_translation_missing_table.php   # Missing keys tracking table
 │
 ├── lang/
 │   ├── en.json                                     # English strings (source, auto-populated)
@@ -1042,7 +1042,7 @@ The dashboard has a tabbed interface. In the **URLs** tab:
 7. **Clear All** — wipes the entire missing keys table
 8. A **processing banner** appears at the top of the tab when any translations are in progress, showing per-locale progress bars
 
-> **How Missing Keys work:** When a user visits `/ar/about` and the Arabic translation for `"About Us"` doesn't exist, the `handleMissingKeysUsing` hook automatically logs it to the `translations_missing` table with locale `ar`. The occurrence counter increments on every subsequent hit. You can then translate these keys individually or in batch directly from the Missing Keys tab.
+> **How Missing Keys work:** When a user visits `/ar/about` and the Arabic translation for `"About Us"` doesn't exist, the `handleMissingKeysUsing` hook automatically logs it to the `translation_missing` table with locale `ar`. The occurrence counter increments on every subsequent hit. You can then translate these keys individually or in batch directly from the Missing Keys tab.
 
 ## 🔍 How It Works
 
@@ -1085,7 +1085,7 @@ Lang::handleMissingKeysUsing(function (string $key, ...) use ($buffer) {
     if ($locale === $sourceLocale) {
         $buffer->addSourceKey($key);   // → en.json via ProcessMissingKeysJob
     } else {
-        $buffer->addTargetKey($key, $locale);  // → translations_missing table
+        $buffer->addTargetKey($key, $locale);  // → translation_missing table
     }
 
     return $key;
@@ -1114,7 +1114,7 @@ $this->app->terminating(function () use ($buffer) {
 This means:
 
 - **Source locale (en):** Any `__('new string')` that isn't in `en.json` gets added automatically after the request — no scanning needed
-- **Target locales (ar, es, etc.):** Missing translations are upserted into the `translations_missing` table with occurrence counts, so you can see exactly what needs translating and how often
+- **Target locales (ar, es, etc.):** Missing translations are upserted into the `translation_missing` table with occurrence counts, so you can see exactly what needs translating and how often
 - **Zero overhead for existing translations:** The callback only fires when a key is actually missing. Translated strings go through Laravel's normal fast path
 - **Laravel internals are filtered out:** The hook skips `validation.*`, `pagination.*`, `passwords.*`, `auth.*`, dot-notation group keys, and file path artifacts so they never pollute your translation files
 
@@ -1377,7 +1377,7 @@ The **Missing Keys** tab provides real-time visibility into untranslated strings
 - **Bulk translate per locale** — click "Translate All" on a locale group, the table rows hide and a progress bar appears with real-time updates
 - **Processing banner** — a top-of-tab indicator appears when any translations are in progress, showing batch locale names and per-locale progress bars
 - **Clear Resolved** — scans missing keys against the target locale JSON files and removes entries that have been translated since they were logged
-- **Clear All** — wipes the entire `translations_missing` table
+- **Clear All** — wipes the entire `translation_missing` table
 
 ## 🐛 Troubleshooting
 
@@ -1588,7 +1588,7 @@ $extractor = new StringExtractor();
 
 // Visit a URL internally — triggers handleMissingKeysUsing for all __() calls
 $extractor->extractFromUrl('https://your-app.com/home');
-// Returns void — the hook handles saving to en.json and logging to translations_missing
+// Returns void — the hook handles saving to en.json and logging to translation_missing
 
 // Get all keys from a language file
 $allKeys = $extractor->getAllKeys('en');
