@@ -87,6 +87,7 @@
                 'extract' => 'Extract Strings',
                 'translate' => 'Translate',
                 'status' => 'Translation Status',
+                'missing' => 'Missing Keys' . ($totalMissingKeys > 0 ? ' (' . $totalMissingKeys . ')' : ''),
                 'config' => 'Configuration',
             ] as $tab => $label)
                 <button
@@ -551,6 +552,241 @@
                     <svg class="w-8 h-8 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
                     <p>No keys found in en.json. Please collect strings first.</p>
                 </div>
+            @endif
+        </div>
+    @endif
+
+    {{-- ═══════════════════════════════════════════════════════════════════════ --}}
+    {{-- Tab: Missing Keys                                                      --}}
+    {{-- ═══════════════════════════════════════════════════════════════════════ --}}
+    @if($activeTab === 'missing')
+
+        {{-- ── Processing Banner (top of tab) ──────────────────────────────── --}}
+        @if(!empty($missingKeysTranslatingLocales) || !empty($translatingKeyIds))
+            <div class="mb-6 p-4 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-purple-600 dark:text-purple-400 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-purple-800 dark:text-purple-200">
+                            @if(!empty($missingKeysTranslatingLocales))
+                                Batch translating:
+                                {{ implode(', ', array_map(fn($l) => config('translation.languages.' . $l, strtoupper($l)), array_keys($missingKeysTranslatingLocales))) }}
+                            @endif
+                            @if(!empty($translatingKeyIds))
+                                @if(!empty($missingKeysTranslatingLocales)) · @endif
+                                {{ count($translatingKeyIds) }} individual key(s) in progress
+                            @endif
+                        </p>
+
+                        {{-- Per-locale progress bars --}}
+                        @foreach($missingKeysTranslatingLocales as $locale => $status)
+                            @if(isset($translationProgress[$locale]) && $translationProgress[$locale]['total'] > 0)
+                                <div class="mt-2.5">
+                                    <div class="flex justify-between text-xs text-purple-700 dark:text-purple-300 mb-1">
+                                        <span>{{ config('translation.languages.' . $locale, strtoupper($locale)) }}</span>
+                                        <span>{{ $translationProgress[$locale]['completed'] }} / {{ $translationProgress[$locale]['total'] }} · {{ $translationProgress[$locale]['percentage'] }}%</span>
+                                    </div>
+                                    <div class="w-full bg-purple-200 dark:bg-purple-800 rounded-full h-2 overflow-hidden">
+                                        <div
+                                            class="h-2 rounded-full transition-all duration-500 {{ $translationProgress[$locale]['status'] === 'completed' ? 'bg-green-500' : 'bg-purple-500' }}"
+                                            style="width: {{ $translationProgress[$locale]['percentage'] }}%"
+                                        ></div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        {{-- ── Main Card ───────────────────────────────────────────────────── --}}
+        <div class="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl p-6">
+
+            {{-- Header --}}
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Missing Translation Keys</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Keys detected as missing during live traffic for target languages.</p>
+                </div>
+                <div class="flex gap-2">
+                    @if($totalMissingKeys > 0)
+                        <button
+                            wire:click="clearResolvedMissingKeys"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Clear Resolved
+                        </button>
+                        <button
+                            wire:click="clearAllMissingKeys"
+                            wire:confirm="Delete all missing key records?"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                        >
+                            Clear All
+                        </button>
+                    @endif
+                </div>
+            </div>
+
+            {{-- Filters --}}
+            <div class="flex gap-3 mb-4">
+                <div class="relative flex-1">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <input
+                        wire:model.live.debounce.300ms="missingKeysFilter"
+                        type="text"
+                        placeholder="Search keys..."
+                        class="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+                <select
+                    wire:model.live="missingKeysLocaleFilter"
+                    class="px-3 py-2 text-sm border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                    <option value="">All Languages</option>
+                    @foreach(config('translation.target_locales', []) as $locale)
+                        <option value="{{ $locale }}">{{ config('translation.languages.' . $locale, strtoupper($locale)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- ── Grouped by locale ───────────────────────────────────────── --}}
+            @if(!empty($missingKeysGrouped))
+                @foreach($missingKeysGrouped as $locale => $keys)
+                    @php $isBatchTranslating = isset($missingKeysTranslatingLocales[$locale]); @endphp
+
+                    <div class="mb-6 border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden {{ $isBatchTranslating ? 'opacity-75' : '' }}" wire:key="missing-group-{{ $locale }}">
+
+                        {{-- Locale header --}}
+                        <div class="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-zinc-800">
+                            <div class="flex items-center gap-3">
+                                <span class="font-semibold text-gray-900 dark:text-white">
+                                    {{ config('translation.languages.' . $locale, strtoupper($locale)) }}
+                                </span>
+                                <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-400 rounded uppercase">{{ $locale }}</span>
+                                <span class="text-sm text-gray-500 dark:text-gray-400">{{ count($keys) }} missing</span>
+                            </div>
+
+                            @if($isBatchTranslating)
+                                {{-- Translating state --}}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                                    <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                    </svg>
+                                    Translating...
+                                </span>
+                            @else
+                                {{-- Translate All button --}}
+                                <button
+                                    wire:click="translateAllMissingForLocale('{{ $locale }}')"
+                                    wire:confirm="Translate all {{ count($keys) }} missing keys for {{ config('translation.languages.' . $locale, strtoupper($locale)) }}?"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                                    Translate All
+                                </button>
+                            @endif
+                        </div>
+
+                        {{-- Inline progress bar for batch translating --}}
+                        @if($isBatchTranslating && isset($translationProgress[$locale]) && $translationProgress[$locale]['total'] > 0)
+                            <div class="px-4 py-3 bg-purple-50 dark:bg-purple-900/10 border-b border-gray-200 dark:border-zinc-700">
+                                <div class="flex justify-between text-xs text-purple-700 dark:text-purple-300 mb-1.5">
+                                    <span>Processing batch translation...</span>
+                                    <span class="font-semibold">
+                                        {{ $translationProgress[$locale]['completed'] }} / {{ $translationProgress[$locale]['total'] }}
+                                        @if($translationProgress[$locale]['failed'] > 0)
+                                            <span class="text-red-500">({{ $translationProgress[$locale]['failed'] }} failed)</span>
+                                        @endif
+                                    </span>
+                                </div>
+                                <div class="w-full bg-purple-200 dark:bg-purple-800 rounded-full h-2.5 overflow-hidden">
+                                    <div
+                                        class="h-2.5 rounded-full transition-all duration-500 {{ $translationProgress[$locale]['status'] === 'completed' ? 'bg-green-500' : 'bg-purple-500' }}"
+                                        style="width: {{ $translationProgress[$locale]['percentage'] }}%"
+                                    ></div>
+                                </div>
+                            </div>
+                        @endif
+
+                        {{-- Keys table — hidden during batch translate --}}
+                        @if(!$isBatchTranslating)
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="border-b border-gray-200 dark:border-zinc-700">
+                                            <th class="text-left py-2.5 px-4 font-medium text-gray-600 dark:text-gray-400">Key</th>
+                                            <th class="text-left py-2.5 px-4 font-medium text-gray-600 dark:text-gray-400 w-20">Hits</th>
+                                            <th class="text-left py-2.5 px-4 font-medium text-gray-600 dark:text-gray-400 w-28">First Seen</th>
+                                            <th class="text-left py-2.5 px-4 font-medium text-gray-600 dark:text-gray-400 w-28">Last Seen</th>
+                                            <th class="text-left py-2.5 px-4 font-medium text-gray-600 dark:text-gray-400 w-20">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100 dark:divide-zinc-800">
+                                        @foreach($keys as $entry)
+                                            @php $isTranslating = in_array($entry['id'], $translatingKeyIds); @endphp
+
+                                            <tr
+                                                class="{{ $isTranslating ? 'opacity-50 pointer-events-none' : 'hover:bg-gray-50 dark:hover:bg-zinc-800/50' }} transition-opacity"
+                                                wire:key="missing-{{ $entry['id'] }}"
+                                            >
+                                                <td class="py-2.5 px-4">
+                                                    <span class="text-gray-700 dark:text-gray-300 break-words">{{ $entry['key'] }}</span>
+                                                </td>
+                                                <td class="py-2.5 px-4">
+                                                    <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded">
+                                                        {{ $entry['occurrences'] }}×
+                                                    </span>
+                                                </td>
+                                                <td class="py-2.5 px-4 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">{{ $entry['first_seen'] }}</td>
+                                                <td class="py-2.5 px-4 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">{{ $entry['last_seen'] }}</td>
+                                                <td class="py-2.5 px-4">
+                                                    @if($isTranslating)
+                                                        {{-- Spinner while translating --}}
+                                                        <svg class="w-4 h-4 text-purple-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                                        </svg>
+                                                    @else
+                                                        {{-- AI Translate button --}}
+                                                        <button
+                                                            wire:click="translateMissingKey({{ $entry['id'] }})"
+                                                            class="p-1 rounded text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                                                            title="AI Translate"
+                                                        >
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                                                        </button>
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @else
+                            {{-- Placeholder while batch translating --}}
+                            <div class="py-10 text-center">
+                                <svg class="w-10 h-10 text-purple-400 dark:text-purple-500 mx-auto mb-3 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Translating {{ count($keys) }} keys via queue jobs...</p>
+                                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Rows will reappear if any translations fail.</p>
+                            </div>
+                        @endif
+                    </div>
+                @endforeach
+            @else
+                {{-- Empty state --}}
+                @if(empty($missingKeysTranslatingLocales))
+                    <div class="text-center py-12">
+                        <svg class="w-12 h-12 text-green-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <p class="text-gray-500 dark:text-gray-400 font-medium">No missing translation keys</p>
+                        <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">Missing keys appear here automatically as users visit pages with untranslated strings.</p>
+                    </div>
+                @endif
             @endif
         </div>
     @endif

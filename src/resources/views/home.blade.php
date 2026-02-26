@@ -2,6 +2,5 @@
 @include('lang')
 
 {{-- declare all your strings with proper translate syntrax --}}
-<h2>@__t('we can translate')</h2>
-<h2>@__t('any application')</h2>
-<h2>@__t('any supported language')</h2>
+<h2>{{ __('this is a sentence') }}</h2>
+<h2>{{ __('this is also a sentence') }}</h2>

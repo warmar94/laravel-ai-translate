@@ -26,3 +26,16 @@ CREATE TABLE `translation_progress` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `translation_progress_type_locale_unique` (`type`, `locale`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- missing_translations
+CREATE TABLE `missing_translations` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `key` VARCHAR(500) NOT NULL,
+    `locale` VARCHAR(10) NOT NULL DEFAULT 'en',
+    `occurrences` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    `first_seen` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `last_seen` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_key_locale` (`key`, `locale`),
+    INDEX `idx_locale` (`locale`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

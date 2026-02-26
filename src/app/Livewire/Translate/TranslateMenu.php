@@ -5,6 +5,7 @@ namespace App\Livewire\Translate;
 use Livewire\Component;
 use App\Models\Translate\TranslationUrl;
 use App\Models\Translate\TranslationProgress;
+use App\Models\Translate\MissingTranslation;
 use App\Services\Translate\URLCollector;
 use App\Services\Translate\StringExtractor;
 use App\Services\Translate\AITranslator;
@@ -29,6 +30,7 @@ class TranslateMenu extends Component
     // Counts
     public int $totalUrls = 0;
     public int $totalApiEndpoints = 0;
+    public int $totalMissingKeys = 0;
 
     protected $logProcess;
 
@@ -40,7 +42,6 @@ class TranslateMenu extends Component
         'percentage' => 0,
         'status' => 'idle',
     ];
-
     public $translationProgress = [];
 
     // Status
@@ -60,6 +61,13 @@ class TranslateMenu extends Component
     public array $editableStrings = [];
     public bool $showStringEditor = false;
 
+    // Missing keys tab
+    public string $missingKeysFilter = '';
+    public string $missingKeysLocaleFilter = '';
+    public array $missingKeysGrouped = [];
+    public array $translatingKeyIds = [];
+    public array $missingKeysTranslatingLocales = [];
+
     public function mount()
     {
         $this->logProcess = config('translation.log_process', false);
@@ -75,16 +83,15 @@ class TranslateMenu extends Component
     {
         $this->totalUrls = TranslationUrl::extractable()->count();
         $this->totalApiEndpoints = TranslationUrl::apiEndpoints()->count();
+        $this->totalMissingKeys = MissingTranslation::targetLocales()->count();
     }
 
     public function getRegularUrlsProperty()
     {
         $query = TranslationUrl::regularUrls()->orderBy('id', 'desc');
-
         if ($this->urlFilter) {
             $query->where('url', 'like', '%' . $this->urlFilter . '%');
         }
-
         return $query->get();
     }
 
@@ -103,11 +110,10 @@ class TranslateMenu extends Component
         }
 
         $lines = array_filter(array_map('trim', explode("\n", $input)));
-
         $collector = new URLCollector();
         $added = $collector->addBulk($lines);
-
         $skipped = count($lines) - $added;
+
         $this->statusMessage = "Added {$added} new URL(s)." . ($skipped > 0 ? " {$skipped} duplicate(s) skipped." : '');
         $this->statusType = 'success';
         $this->bulkUrls = '';
@@ -124,7 +130,6 @@ class TranslateMenu extends Component
         }
 
         $lines = array_filter(array_map('trim', explode("\n", $input)));
-
         $collector = new URLCollector();
         $totalAdded = $collector->collectFromApiEndpoints($lines);
 
@@ -138,7 +143,6 @@ class TranslateMenu extends Component
     {
         $collector = new URLCollector();
         $added = $collector->refreshAllApiEndpoints();
-
         $this->statusMessage = "Refreshed all API endpoints. {$added} new URL(s) added.";
         $this->statusType = 'success';
         $this->refreshCounts();
@@ -210,8 +214,8 @@ class TranslateMenu extends Component
 
         foreach ($locales as $locale) {
             $targetKeys = $extractor->getAllKeys($locale);
-
             $translated = 0;
+
             foreach ($targetKeys as $key => $value) {
                 if ($value !== $key && !empty($value)) {
                     $translated++;
@@ -237,7 +241,6 @@ class TranslateMenu extends Component
     public function loadProgress()
     {
         $extraction = TranslationProgress::stringExtraction()->first();
-
         if ($extraction) {
             $this->stringExtractionProgress = [
                 'total' => $extraction->total,
@@ -253,7 +256,6 @@ class TranslateMenu extends Component
 
         foreach ($locales as $locale) {
             $progress = TranslationProgress::translation()->forLocale($locale)->first();
-
             if ($progress) {
                 $this->translationProgress[$locale] = [
                     'total' => $progress->total,
@@ -309,7 +311,6 @@ class TranslateMenu extends Component
             $this->statusType = 'success';
             $this->isProcessing = true;
             $this->loadProgress();
-
         } catch (\Exception $e) {
             $this->statusMessage = "Error: " . $e->getMessage();
             $this->statusType = 'error';
@@ -332,7 +333,6 @@ class TranslateMenu extends Component
             }
 
             $translator = new AITranslator();
-
             if (!$translator->isConfigured()) {
                 $this->statusMessage = "OpenAI API key not configured.";
                 $this->statusType = 'error';
@@ -345,8 +345,8 @@ class TranslateMenu extends Component
 
             foreach ($locales as $locale) {
                 $existing = $extractor->getAllKeys($locale);
-
                 $untranslated = [];
+
                 foreach ($sourceKeys as $key => $value) {
                     if (!isset($existing[$key]) || $existing[$key] === $key) {
                         $untranslated[$key] = $value;
@@ -385,11 +385,204 @@ class TranslateMenu extends Component
             }
 
             $this->loadProgress();
-
         } catch (\Exception $e) {
             $this->statusMessage = "Error: " . $e->getMessage();
             $this->statusType = 'error';
         }
+    }
+
+    // ─── Missing Keys ───//
+
+    public function loadMissingKeys()
+    {
+        $query = MissingTranslation::targetLocales()->recentFirst();
+
+        if ($this->missingKeysLocaleFilter) {
+            $query->forLocale($this->missingKeysLocaleFilter);
+        }
+
+        if ($this->missingKeysFilter) {
+            $query->where('key', 'like', '%' . $this->missingKeysFilter . '%');
+        }
+
+        $missing = $query->get();
+
+        $this->missingKeysGrouped = [];
+        foreach ($missing as $row) {
+            $this->missingKeysGrouped[$row->locale][] = [
+                'id' => $row->id,
+                'key' => $row->key,
+                'occurrences' => $row->occurrences,
+                'first_seen' => $row->first_seen->diffForHumans(),
+                'last_seen' => $row->last_seen->diffForHumans(),
+            ];
+        }
+
+        // Clean up finished batch locale indicators
+        foreach ($this->missingKeysTranslatingLocales as $locale => $status) {
+            $progress = $this->translationProgress[$locale] ?? null;
+            $hasKeys = isset($this->missingKeysGrouped[$locale]);
+            if (!$hasKeys || ($progress && in_array($progress['status'], ['completed', 'idle']))) {
+                unset($this->missingKeysTranslatingLocales[$locale]);
+            }
+        }
+
+        // Clean up finished individual key indicators
+        if (!empty($this->translatingKeyIds)) {
+            $this->translatingKeyIds = MissingTranslation::whereIn('id', $this->translatingKeyIds)
+                ->pluck('id')
+                ->toArray();
+        }
+
+        $this->refreshCounts();
+    }
+
+    public function updatedMissingKeysFilter()
+    {
+        $this->loadMissingKeys();
+    }
+
+    public function updatedMissingKeysLocaleFilter()
+    {
+        $this->loadMissingKeys();
+    }
+
+    public function translateMissingKey(int $id)
+    {
+        if (in_array($id, $this->translatingKeyIds)) return;
+
+        $missing = MissingTranslation::find($id);
+        if (!$missing) return;
+
+        $translator = new AITranslator();
+        if (!$translator->isConfigured()) {
+            $this->statusMessage = "OpenAI API key not configured.";
+            $this->statusType = 'error';
+            return;
+        }
+
+        // Dispatch as a single-item batch job
+        TranslateStringBatchJob::dispatch(
+            [$missing->key => $missing->key],
+            $missing->locale
+        );
+
+        // Remove from missing table immediately
+        $missing->delete();
+
+        $this->statusMessage = "Queued \"{$missing->key}\" for {$missing->locale} translation.";
+        $this->statusType = 'success';
+
+        $this->loadMissingKeys();
+    }
+
+    public function translateAllMissingForLocale(string $locale)
+    {
+        if (isset($this->missingKeysTranslatingLocales[$locale])) return;
+
+        $translator = new AITranslator();
+        if (!$translator->isConfigured()) {
+            $this->statusMessage = "OpenAI API key not configured.";
+            $this->statusType = 'error';
+            return;
+        }
+
+        $missing = MissingTranslation::forLocale($locale)->get();
+        if ($missing->isEmpty()) {
+            $this->statusMessage = "No missing keys for {$locale}.";
+            $this->statusType = 'info';
+            return;
+        }
+
+        $batchSize = config('translation.translation.batch_size', 20);
+        $strings = $missing->pluck('key', 'key')->toArray();
+
+        TranslationProgress::updateOrCreate(
+            ['type' => 'translation', 'locale' => $locale],
+            [
+                'total' => count($strings),
+                'completed' => 0,
+                'failed' => 0,
+                'started_at' => now(),
+                'updated_at' => now(),
+                'completed_at' => null,
+            ]
+        );
+
+        $batches = array_chunk($strings, $batchSize, true);
+        foreach ($batches as $batch) {
+            TranslateStringBatchJob::dispatch($batch, $locale);
+        }
+
+        MissingTranslation::clearLocale($locale);
+
+        $this->missingKeysTranslatingLocales[$locale] = true;
+        $this->isProcessing = true;
+
+        $localeName = config('translation.languages.' . $locale, strtoupper($locale));
+        $this->statusMessage = "Queued " . count($strings) . " missing keys for {$localeName}.";
+        $this->statusType = 'success';
+
+        $this->loadMissingKeys();
+        $this->loadProgress();
+    }
+
+    public function refreshMissingKeysProgress()
+    {
+        $this->loadProgress();
+        $this->loadMissingKeys();
+        $this->loadTranslationStatus();
+
+        // Check if all batch translations finished
+        $anyRunning = false;
+        foreach ($this->missingKeysTranslatingLocales as $locale => $status) {
+            $progress = $this->translationProgress[$locale] ?? null;
+            if ($progress && $progress['status'] === 'running') {
+                $anyRunning = true;
+            } else {
+                unset($this->missingKeysTranslatingLocales[$locale]);
+            }
+        }
+
+        if (!$anyRunning) {
+            $this->missingKeysTranslatingLocales = [];
+            if (empty($this->translatingKeyIds)) {
+                $this->isProcessing = false;
+            }
+        }
+    }
+
+    public function clearResolvedMissingKeys()
+    {
+        $extractor = new StringExtractor();
+        $cleared = 0;
+
+        $allMissing = MissingTranslation::targetLocales()->get();
+
+        foreach ($allMissing as $missing) {
+            $targetKeys = $extractor->getAllKeys($missing->locale);
+
+            if (
+                isset($targetKeys[$missing->key]) &&
+                $targetKeys[$missing->key] !== $missing->key &&
+                !empty($targetKeys[$missing->key])
+            ) {
+                $missing->delete();
+                $cleared++;
+            }
+        }
+
+        $this->statusMessage = "Cleared {$cleared} resolved missing key(s).";
+        $this->statusType = 'success';
+        $this->loadMissingKeys();
+    }
+
+    public function clearAllMissingKeys()
+    {
+        MissingTranslation::clearAll();
+        $this->statusMessage = "All missing keys cleared.";
+        $this->statusType = 'success';
+        $this->loadMissingKeys();
     }
 
     // ─── String Editor ───//
@@ -443,7 +636,6 @@ class TranslateMenu extends Component
         if (empty($this->editingLocale)) return;
 
         $filePath = lang_path("{$this->editingLocale}.json");
-
         $existing = [];
         if (file_exists($filePath)) {
             $existing = json_decode(file_get_contents($filePath), true) ?? [];
@@ -472,7 +664,6 @@ class TranslateMenu extends Component
         $sourceText = $enKeys[$key] ?? $key;
 
         $translator = new AITranslator();
-
         if (!$translator->isConfigured()) {
             $this->statusMessage = "OpenAI API key not configured.";
             $this->statusType = 'error';
@@ -513,6 +704,13 @@ class TranslateMenu extends Component
         $this->loadProgress();
         $this->statusMessage = "Progress reset successfully!";
         $this->statusType = 'success';
+    }
+
+    public function updatedActiveTab($value)
+    {
+        if ($value === 'missing') {
+            $this->loadMissingKeys();
+        }
     }
 
     public function render()

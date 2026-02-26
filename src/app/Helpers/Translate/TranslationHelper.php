@@ -10,7 +10,6 @@
 |
 */
 
-use App\Services\Translate\StringExtractor;
 use Illuminate\Support\Facades\Route;
 
 if (!function_exists('langCode')) {
@@ -55,12 +54,5 @@ if (!function_exists('isRoute')) {
         }
 
         return false;
-    }
-}
-
-if (!function_exists('isCollectionMode')) {
-    function isCollectionMode(): bool
-    {
-        return StringExtractor::$collectionMode;
     }
 }

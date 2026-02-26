@@ -4,31 +4,39 @@
 
 A **complete multilingual framework** for Laravel applications. This isn't just a translation tool - it's a full-featured localization system with AI-powered translations, automatic routing, SEO optimization, and RTL support out of the box.
 
-**Built on top of Laravel's default translation system, but adds:**
+**Built on top of Laravel's default translation system** — no custom Blade directives or proprietary syntax. Uses standard `__()` everywhere, so your templates stay clean and portable.
+
+**What it adds on top of Laravel's built-in translation:**
+
 - ✅ Automatic language-prefixed routing (`/about`, `/ar/about`)
 - ✅ Smart language detection middleware
 - ✅ AI-powered translation with OpenAI
-- ✅ Automatic string collection from rendered pages
-- ✅ Real-time translation dashboard
+- ✅ **Dual string collection** — active URL scanning + passive detection via Laravel's `handleMissingKeysUsing`
+- ✅ Real-time translation dashboard with live progress tracking
+- ✅ **Missing Keys dashboard** — auto-detected untranslated strings from live traffic with per-locale tracking
 - ✅ Complete SEO implementation (hreflang, canonical URLs)
 - ✅ RTL language support
 - ✅ Global helper functions for easy integration
 - ✅ Database-backed URL management with API endpoint auto-fetching
 - ✅ Eloquent models for all database operations
 - ✅ Inline manual translation editor per language
-- ✅ Per-string AI translation
+- ✅ Per-string AI translation (individual or batch)
 
 ## 🌟 Features
 
 ### 🎯 Core Translation Features
+
 - 🤖 **AI-Powered Translations**: Leverages OpenAI GPT-4 for context-aware, high-quality translations
-- 🔍 **Automatic String Collection**: Intelligently scans your application and collects all translatable strings
+- 🔍 **Dual String Collection**: Active URL scanning + passive detection via Laravel's native `handleMissingKeysUsing` hook — new strings are caught automatically from live traffic without any extra work
 - 🌐 **Multi-Language Support**: Translate your entire application into unlimited languages
 - 📊 **Real-Time Dashboard**: Beautiful Livewire-powered interface with live progress tracking
 - ⚡ **Queue-Based Processing**: Scalable batch processing for thousands of strings
-- 🎯 **Custom Blade Directive**: Simple `@__t()` syntax for marking translatable strings
+- 🎯 **Zero Custom Syntax**: Uses Laravel's standard `__()` function — no proprietary directives, no learning curve, templates stay clean and portable
+- 🗃️ **Missing Keys Tracking**: Database-backed `missing_translations` table with occurrence counts, first/last seen timestamps, grouped by locale — automatically populated from live traffic
+- 🔧 **Local API Deadlock Prevention**: Internal request handling for local API endpoints avoids single-threaded `php artisan serve` deadlock
 
 ### 🔗 URL Management
+
 - 🗄️ **Database-Backed URLs**: All URLs stored in a dedicated `translation_urls` table with full CRUD support
 - 🌐 **API Endpoint Auto-Fetching**: Add API endpoints that return JSON arrays of URLs — the system fetches and imports them automatically
 - 🔄 **Re-Fetchable Endpoints**: Saved API endpoints can be re-triggered at any time to discover new URLs
@@ -36,13 +44,14 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - 📊 **Indexed for Scale**: Database columns indexed for performance with tens of thousands of URLs
 
 ### 🚀 Advanced Routing & Localization
+
 - 🛣️ **Smart Language Routing**: Automatic language-prefixed URLs (`/about`, `/ar/about`, `/es/about`)
 - 🔧 **Custom `langRoute()` Helper**: One function to create all language routes automatically
 - 🌍 **Language Middleware**: Intelligent language detection and switching
 - 📝 **SEO-Optimized**: Auto-generated hreflang tags, canonical URLs, and x-default handling
 - 🔄 **Language Switcher**: Built-in helpers for creating language selection menus
 - ↔️ **RTL Support**: Full right-to-left language support with automatic detection
-- 🎨 **Global Helper Functions**: `langUrl()`, `isRtl()`, `isRoute()`, `langCode()`, and `isCollectionMode()` available everywhere
+- 🎨 **Global Helper Functions**: `langUrl()`, `isRtl()`, `isRoute()`, and `langCode()` available everywhere
 
 ## 📋 Table of Contents
 
@@ -68,7 +77,6 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 - Queue worker (Redis recommended, Database queue supported)
 - Livewire 3.x / 4.x
 
-
 ## 📦 Installation
 
 ### 1. Publish Laravel's Default Localization
@@ -78,11 +86,13 @@ php artisan lang:publish
 ```
 
 ### 2. Install the package via Composer
+
 ```bash
 composer require warmar/laravel-ai-translate
 ```
 
 ### 3. Install the package assets
+
 ```bash
 php artisan ai-translate:install
 ```
@@ -100,7 +110,7 @@ return [
 ];
 ```
 
-> **Note:** The package ships with its own `TranslationServiceProvider` that registers the `@__t()` Blade directive and all translation functionality. You do **not** need to modify your `AppServiceProvider`.
+> **Note:** The package ships with its own `TranslationServiceProvider` that hooks into Laravel's `handleMissingKeysUsing` for automatic string collection and missing key detection. You do **not** need to modify your `AppServiceProvider`.
 
 ### 5. Register Language Middleware
 
@@ -131,7 +141,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
-
 ```
 
 ### 6. Configure Environment
@@ -145,7 +154,7 @@ OPENAI_MODEL=gpt-4o-mini
 
 That's it for `.env`. All other translation settings are managed directly in `config/translation.php` (see [Configuration](#configuration)).
 
-> **Note:** Collection mode, URL delay, and logging are configured in `config/translation.php` — not in `.env`. Collection mode is handled automatically at runtime by the string extraction system and requires no manual toggling.
+> **Note:** URL delay, logging, and other settings are configured in `config/translation.php` — not in `.env`. String collection is handled automatically at runtime via Laravel's `handleMissingKeysUsing` hook and requires no manual toggling.
 
 ### 7. Register Global Helper Functions
 
@@ -180,16 +189,13 @@ The helper file provides these global functions for use in Blade templates, cont
 | `isRtl()` | `bool` | Whether current locale is RTL |
 | `langUrl($route, $params)` | `string` | Language-prefixed URL for a named route |
 | `isRoute($name)` | `bool` | Whether current route matches (works with language prefixes) |
-| `isCollectionMode()` | `bool` | Whether string collection is currently active |
 
 ### 8. Configure Queue Workers
 
 **Development Environment:**
-
 If using `composer run dev`, queue workers are typically already running.
 
 **Production/Dedicated Server:**
-
 Start queue workers manually:
 
 ```bash
@@ -200,7 +206,7 @@ php artisan queue:work
 
 ### 9. Create Required Database Tables
 
-The system uses two database tables managed via Eloquent models. If you installed via the Laravel install command, skip this step.
+The system uses three database tables managed via Eloquent models. If you installed via the Laravel install command, skip this step.
 
 #### Option A: Laravel Migrations
 
@@ -239,6 +245,19 @@ CREATE TABLE `translation_progress` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `translation_progress_type_locale_unique` (`type`, `locale`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- missing_translations: Tracks missing translation keys detected from live traffic
+CREATE TABLE `missing_translations` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `key` VARCHAR(500) NOT NULL,
+    `locale` VARCHAR(10) NOT NULL DEFAULT 'en',
+    `occurrences` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    `first_seen` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `last_seen` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_key_locale` (`key`, `locale`),
+    INDEX `idx_locale` (`locale`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
 #### Table Details
@@ -268,10 +287,23 @@ CREATE TABLE `translation_progress` (
 | `updated_at` | TIMESTAMP | Last progress update |
 | `completed_at` | TIMESTAMP | When processing finished |
 
+**`missing_translations`** — Tracks missing translation keys detected automatically from live traffic via Laravel's `handleMissingKeysUsing` hook.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | BIGINT UNSIGNED | Auto-increment primary key |
+| `key` | VARCHAR(500) | The untranslated string key |
+| `locale` | VARCHAR(10) | The locale where the translation was missing |
+| `occurrences` | BIGINT UNSIGNED | How many times this key was requested (auto-increments on each hit) |
+| `first_seen` | DATETIME | When this key was first detected as missing |
+| `last_seen` | DATETIME | When this key was most recently requested (auto-updates) |
+
 > **Important:** The `is_api` column distinguishes between regular URLs and API endpoints. Regular URLs (`is_api = 0`) are scanned for translatable strings. API endpoints (`is_api = 1`) are fetched to discover new URLs from their JSON response — they are **never** scanned for strings directly.
 
 ### 10. Install Required Files
+
 If you installed via Laravel Command skip this Step.
+
 Copy the following files to your Laravel application:
 
 **Configuration:**
@@ -284,28 +316,28 @@ Copy the following files to your Laravel application:
 - `app/Helpers/Translate/TranslationHelper.php` (contains translation helper functions)
 
 **Models:**
-- `app/Models/Shop/Translate/TranslationUrl.php`
-- `app/Models/Shop/Translate/TranslationProgress.php`
+- `app/Models/Translate/TranslationUrl.php`
+- `app/Models/Translate/TranslationProgress.php`
+- `app/Models/Translate/MissingTranslation.php`
 
 **Services:**
-- `app/Services/Shop/Translate/StringExtractor.php`
-- `app/Services/Shop/Translate/URLCollector.php`
-- `app/Services/Shop/Translate/AITranslator.php`
+- `app/Services/Translate/StringExtractor.php`
+- `app/Services/Translate/URLCollector.php`
+- `app/Services/Translate/AITranslator.php`
 
 **Jobs:**
-- `app/Jobs/Shop/ScanUrlForStringsJob.php`
-- `app/Jobs/Shop/TranslateStringBatchJob.php`
+- `app/Jobs/Translate/ScanUrlForStringsJob.php`
+- `app/Jobs/Translate/TranslateStringBatchJob.php`
 
 **Middleware:**
 - `app/Http/Middleware/Translate/LanguageMiddleware.php`
 
 **Livewire Components:**
-- `app/Livewire/Shop/Admin/Translate/TranslateMenu.php`
-- `resources/views/livewire/shop/admin/translate/translate-menu.blade.php`
+- `app/Livewire/Translate/TranslateMenu.php`
+- `resources/views/livewire/translate/translate-menu.blade.php`
 
 **Blade Views:**
 - `resources/views/lang.blade.php`
-
 
 ### 11. Clear Cache
 
@@ -333,32 +365,29 @@ your-laravel-app/
 │   │           └── LanguageMiddleware.php          # Handles language detection and routing
 │   │
 │   ├── Jobs/
-│   │   └── Shop/
-│   │       ├── ScanUrlForStringsJob.php            # Extracts strings from URLs
+│   │   └── Translate/
+│   │       ├── ScanUrlForStringsJob.php            # Visits URLs to trigger string collection
 │   │       └── TranslateStringBatchJob.php         # Translates string batches via AI
 │   │
 │   ├── Livewire/
-│   │   └── Shop/
-│   │       └── Admin/
-│   │           └── Translate/
-│   │               └── TranslateMenu.php           # Dashboard Livewire controller
+│   │   └── Translate/
+│   │       └── TranslateMenu.php                   # Dashboard Livewire controller
 │   │
 │   ├── Models/
-│   │   └── Shop/
-│   │       └── Translate/
-│   │           ├── TranslationUrl.php              # Eloquent model for URLs & API endpoints
-│   │           └── TranslationProgress.php         # Eloquent model for job progress tracking
+│   │   └── Translate/
+│   │       ├── TranslationUrl.php                  # Eloquent model for URLs & API endpoints
+│   │       ├── TranslationProgress.php             # Eloquent model for job progress tracking
+│   │       └── MissingTranslation.php              # Eloquent model for missing key tracking
 │   │
 │   ├── Providers/
 │   │   └── Translate/
-│   │       └── TranslationServiceProvider.php      # Registers @__t() directive
+│   │       └── TranslationServiceProvider.php      # Hooks into handleMissingKeysUsing
 │   │
 │   └── Services/
-│       └── Shop/
-│           └── Translate/
-│               ├── AITranslator.php                # OpenAI API integration
-│               ├── StringExtractor.php             # String extraction logic
-│               └── URLCollector.php                # Database-backed URL collection & API fetching
+│       └── Translate/
+│           ├── AITranslator.php                    # OpenAI API integration
+│           ├── StringExtractor.php                 # Internal URL scanning
+│           └── URLCollector.php                    # Database-backed URL collection & API fetching
 │
 ├── config/
 │   └── translation.php                             # Main configuration file
@@ -366,10 +395,11 @@ your-laravel-app/
 ├── database/
 │   └── migrations/
 │       ├── create_translation_urls_table.php       # URLs table with indexes
-│       └── create_translation_progress_table.php   # Progress tracking table
+│       ├── create_translation_progress_table.php   # Progress tracking table
+│       └── create_missing_translations_table.php   # Missing keys tracking table
 │
 ├── lang/
-│   ├── en.json                                     # English strings (source)
+│   ├── en.json                                     # English strings (source, auto-populated)
 │   ├── ar.json                                     # Arabic translations
 │   └── [locale].json                               # Additional languages
 │
@@ -377,10 +407,8 @@ your-laravel-app/
 │   └── views/
 │       ├── lang.blade.php                          # SEO hreflang tags
 │       └── livewire/
-│           └── shop/
-│               └── admin/
-│                   └── translate/
-│                       └── translate-menu.blade.php  # Dashboard UI (Tailwind CSS)
+│           └── translate/
+│               └── translate-menu.blade.php        # Dashboard UI (Tailwind CSS)
 │
 └── routes/
     └── web.php                                     # Route definitions with langRoute()
@@ -530,6 +558,7 @@ Already included in your installation:
 
 ```php
 <?php
+
 namespace App\Http\Middleware\Translate;
 
 use Closure;
@@ -571,7 +600,6 @@ class LanguageMiddleware
         // Default: no valid 2-letter language prefix → English
         Session::put('language', 'en');
         app()->setLocale('en');
-
         return $next($request);
     }
 }
@@ -615,28 +643,30 @@ The system provides global helper functions via Composer autoloading. These are 
 
 ### Real-World Example: Header Navigation
 
-Here's how to use the helpers in a navigation header:
+Here's how to use the helpers in a navigation header with standard Laravel `__()`:
 
 ```blade
 <header>
     <nav class="{{ isRtl() ? 'flex-row-reverse' : '' }}">
         <a href="{{ langUrl('home') }}" 
            class="{{ isRoute('home') ? 'active' : '' }}">
-            @__t('Home')
+            {{ __('Home') }}
         </a>
         
         <a href="{{ langUrl('about') }}" 
            class="{{ isRoute('about') ? 'active' : '' }}">
-            @__t('About')
+            {{ __('About') }}
         </a>
         
         <a href="{{ langUrl('contact') }}" 
            class="{{ isRoute('contact') ? 'active' : '' }}">
-            @__t('Contact')
+            {{ __('Contact') }}
         </a>
     </nav>
 </header>
 ```
+
+> **Note:** This uses standard Laravel `{{ __('...') }}` syntax. No custom directives needed — the `handleMissingKeysUsing` hook automatically detects and collects any untranslated strings at runtime.
 
 ### Language Switcher Example
 
@@ -680,12 +710,12 @@ The helpers work seamlessly with Livewire:
 ```blade
 <div>
     <a href="{{ langUrl('profile') }}" wire:navigate>
-        @__t('My Profile')
+        {{ __('My Profile') }}
     </a>
     
     <button wire:click="$set('locale', '{{ langCode() }}')" 
             class="{{ isRtl() ? 'mr-auto' : 'ml-auto' }}">
-        @__t('Save Changes')
+        {{ __('Save Changes') }}
     </button>
 </div>
 ```
@@ -701,7 +731,7 @@ return [
     // Enable detailed logging for debugging
     'log_process' => false,
     
-    // Source language (strings are extracted to this language first)
+    // Source language (strings are collected in this language first)
     'source_locale' => 'en',
     
     // Available languages with their full names
@@ -737,15 +767,16 @@ return [
     
     // URL scanning settings
     'urls' => [
-        'delay_between_requests' => 1, // seconds
+        'delay_between_requests' => 1, // seconds between URL scans
         'batch_size' => 50,
-        'timeout' => 20,
+        'timeout' => 20,               // HTTP timeout for external API endpoints
+        'api_scan_internal' => true,   // Use internal requests for local API endpoints (avoids artisan serve deadlock)
     ],
     
     // String extraction settings
     'extraction' => [
         'scan_internal' => true,
-        'clear_cache' => true,
+        'clear_cache' => false,
     ],
     
     // AI translation settings
@@ -762,7 +793,7 @@ return [
 ];
 ```
 
-> **Note:** Only `OPENAI_API_KEY` and `OPENAI_MODEL` use `.env` variables. All other settings like `log_process`, `delay_between_requests`, and `batch_size` are configured directly in this file. Collection mode is handled automatically at runtime — there is no config entry for it.
+> **Note:** Only `OPENAI_API_KEY` and `OPENAI_MODEL` use `.env` variables. All other settings like `log_process`, `delay_between_requests`, and `batch_size` are configured directly in this file. The `api_scan_internal` option ensures local API endpoints (127.0.0.1, localhost) are fetched via internal Laravel requests to avoid deadlock on single-threaded dev servers like `php artisan serve`.
 
 ### Adding New Languages
 
@@ -807,6 +838,7 @@ Here's a real-world example showing how everything works together in `routes/web
 
 ```php
 <?php
+
 use Illuminate\Support\Facades\Route;
 
 // Your Livewire components
@@ -883,15 +915,12 @@ langRoute('post', '/logout', Logout::class, 'logout');
 GET  /                         → home
 GET  /ar/                      → ar.home
 GET  /es/                      → es.home
-
 GET  /about                    → about
 GET  /ar/about                 → ar.about
 GET  /es/about                 → es.about
-
 GET  /products/{slug}          → products.show
 GET  /ar/products/{slug}       → ar.products.show
 GET  /es/products/{slug}       → es.products.show
-
 GET  /dashboard                → dashboard        (language, auth)
 GET  /ar/dashboard             → ar.dashboard     (language, auth)
 GET  /es/dashboard             → es.dashboard     (language, auth)
@@ -899,21 +928,26 @@ GET  /es/dashboard             → es.dashboard     (language, auth)
 
 ## 🚀 Usage
 
-### Step 1: Mark Strings for Translation
+### Step 1: Use Standard Laravel Translation Syntax
 
-In your Blade templates, use the `@__t()` directive:
+In your Blade templates, use Laravel's built-in `__()` function — the same syntax you already know:
 
 ```blade
 {{-- Include hreflang tags in your layout --}}
 @include('lang')
 
-{{-- Mark strings for translation --}}
-<h1>@__t('Welcome to Our Website')</h1>
-<p>@__t('We provide the best service in the industry')</p>
+{{-- Standard Laravel __() — the system collects these automatically --}}
+<h1>{{ __('Welcome to Our Website') }}</h1>
+<p>{{ __('We provide the best service in the industry') }}</p>
 
 {{-- Works with variables too --}}
-<button>@__t('Contact Us')</button>
+<button>{{ __('Contact Us') }}</button>
+
+{{-- With placeholders (standard Laravel feature) --}}
+<p>{{ __('Hello, :name!', ['name' => $user->name]) }}</p>
 ```
+
+> **No custom directives needed.** The system hooks into Laravel's `handleMissingKeysUsing` callback — every `__()` call that can't find a translation key is automatically detected and collected. Your templates use 100% standard Laravel syntax.
 
 ### Step 2: Access the Translation Dashboard
 
@@ -942,7 +976,7 @@ The dashboard has a tabbed interface. In the **URLs** tab:
    ```
    Click **"Fetch & Import URLs"** — the system will:
    - Save each API endpoint to the database (with `is_api = 1`)
-   - HTTP GET each endpoint
+   - HTTP GET each endpoint (or internal request for local URLs)
    - Parse the JSON array response
    - Import each URL from the response as a regular URL
    - Skip any URLs that already exist
@@ -968,9 +1002,11 @@ The dashboard has a tabbed interface. In the **URLs** tab:
 1. Switch to the **Extract Strings** tab
 2. Click **"Collect Strings"**
 3. Monitor the real-time progress bar
-4. That's it! Collection mode is handled automatically at runtime — no need to toggle any `.env` or config values.
+4. That's it! String collection is fully automatic — jobs visit each URL internally, and every `__()` call in your templates triggers the `handleMissingKeysUsing` hook which saves new strings to `en.json`.
 
-> **How it works:** When you click "Collect Strings", the system dispatches queue jobs that internally enable collection mode only for the duration of each scan request. Normal user traffic is never affected. See [How It Works](#how-it-works) for details.
+> **How it works:** When you click "Collect Strings", the system dispatches queue jobs that visit each URL via `app()->handle()`. As each page renders, every `__()` call that doesn't find a matching key triggers the missing key handler, which automatically adds the string to `en.json`. No HTML markers, no regex, no custom directives — just Laravel's own translator doing the work. See [How It Works](#how-it-works) for details.
+
+> **Passive collection also works:** Even without clicking "Collect Strings", any user visiting your site will trigger string collection for any untranslated strings. The active scan is useful for an initial full sweep or after major template changes.
 
 ### Step 5: Translate All Keys
 
@@ -990,87 +1026,112 @@ The dashboard has a tabbed interface. In the **URLs** tab:
    - Click the ✨ sparkles button to AI-translate a single string
    - Green checkmark = translated, grey dash = missing
 
+### Step 7: Monitor Missing Keys
+
+1. Switch to the **Missing Keys** tab
+2. View untranslated strings detected from live traffic for target languages
+3. Keys are **grouped by locale** with occurrence counts and first/last seen timestamps
+4. **Translate individually** — click the ✨ button on any row, a job dispatches immediately and the row disappears
+5. **Translate all per locale** — click "Translate All" on a locale group, rows hide and a progress bar appears
+6. **Clear Resolved** — removes entries that have already been translated since they were logged
+7. **Clear All** — wipes the entire missing keys table
+8. A **processing banner** appears at the top of the tab when any translations are in progress, showing per-locale progress bars
+
+> **How Missing Keys work:** When a user visits `/ar/about` and the Arabic translation for `"About Us"` doesn't exist, the `handleMissingKeysUsing` hook automatically logs it to the `missing_translations` table with locale `ar`. The occurrence counter increments on every subsequent hit. You can then translate these keys individually or in batch directly from the Missing Keys tab.
+
 ## 🔍 How It Works
 
-### The @__t() Directive
+### Standard Laravel `__()` Integration
 
-The system uses a custom Blade directive that operates in two modes:
+The system works with Laravel's standard `__()` translation function — no custom Blade directives or proprietary syntax. This means:
 
-#### Collection Mode (automatic, during string scanning)
+- **Your templates stay clean and portable** — standard `{{ __('...') }}` everywhere
+- **No learning curve** — if you know Laravel, you already know how to use this
+- **Zero vendor lock-in** — remove the package and your templates still work perfectly
+- **IDE support works out of the box** — `__()` is recognized by all PHP IDEs
 
-```php
-@__t('Hello World')
-```
+### How String Collection Works
 
-Outputs:
-```html
-<!--T_START:Hello World:T_END-->Hello World
-```
+The system uses **two complementary approaches** for collecting translatable strings:
 
-The HTML comments act as markers that the scanner can detect and extract.
+#### 1. Passive Collection via `handleMissingKeysUsing` (always active)
 
-#### Normal Mode (default, during regular requests)
+Laravel's `Translator` class has a `handleMissingKeysUsing` method that fires a callback whenever `__()` can't find a translation key. The `TranslationServiceProvider` hooks into this:
 
 ```php
-@__t('Hello World')
-```
+Lang::handleMissingKeysUsing(function (string $key, array $replace, ?string $locale, bool $fallbackUsed) {
+    $locale = $locale ?? app()->getLocale();
+    $sourceLocale = config('translation.source_locale', 'en');
 
-Outputs (if locale is 'ar'):
-```
-مرحبا بالعالم
-```
+    // Skip Laravel internals (validation.required, pagination.next, etc.)
+    if (str_starts_with($key, 'validation.') || 
+        str_starts_with($key, 'pagination.') || 
+        str_starts_with($key, 'passwords.') || 
+        str_starts_with($key, 'auth.')) {
+        return $key;
+    }
 
-Simply calls Laravel's `__()` helper to fetch the translated string.
+    // Skip dot-notation group keys (e.g., "messages.welcome")
+    if (preg_match('/^[a-z_]+\.[a-z_]+/i', $key) && !str_contains($key, ' ')) {
+        return $key;
+    }
 
-#### How Collection Mode Works
+    if ($locale === $sourceLocale) {
+        // Source language → add directly to en.json
+        $path = lang_path("{$sourceLocale}.json");
+        $translations = file_exists($path) ? json_decode(file_get_contents($path), true) ?? [] : [];
+        if (!array_key_exists($key, $translations)) {
+            $translations[$key] = $key;
+            ksort($translations);
+            file_put_contents($path, json_encode($translations, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        }
+        return $key;
+    }
 
-Collection mode is **not** a global toggle. It's a runtime-only static property on the `StringExtractor` class:
-
-```php
-// StringExtractor.php
-public static bool $collectionMode = false;
-```
-
-When the `StringExtractor` scans a URL, it temporarily enables collection mode for that specific internal request only:
-
-```php
-try {
-    self::$collectionMode = true;    // Enable for this scan
-    $response = app()->handle($request);  // Render the page
-    // ... extract markers ...
-} finally {
-    self::$collectionMode = false;   // Always disable after
-}
-```
-
-The `@__t()` Blade directive checks this property at runtime via the `isCollectionMode()` helper:
-
-```php
-Blade::directive('__t', function ($expression) {
-    return "<?php if(isCollectionMode()): ?>" .
-        "<?php echo '<!--T_START:' ... :T_END-->' . __({$expression}); ?>" .
-        "<?php else: ?>" .
-        "<?php echo __({$expression}); ?>" .
-        "<?php endif; ?>";
+    // Target language → log to missing_translations table
+    MissingTranslation::record($key, $locale);
+    return $key;
 });
 ```
 
 This means:
-- **Normal user requests** → `isCollectionMode()` returns `false` → no HTML comment markers, zero overhead
-- **String extraction jobs** → `isCollectionMode()` returns `true` only during the scan → markers are injected → then immediately disabled
-- **No `.env` or config toggling needed** → fully automatic
-- **Cache-safe** → works correctly even with cached Blade views because the check happens at runtime, not compile time
 
-### String Collection Process
+- **Source locale (en):** Any `__('new string')` that isn't in `en.json` gets added automatically — no scanning needed
+- **Target locales (ar, es, etc.):** Missing translations are logged to the `missing_translations` table with occurrence counts, so you can see exactly what needs translating and how often it's requested
+- **Zero overhead for existing translations:** The callback only fires when a key is actually missing. Translated strings go through Laravel's normal fast path
+- **No custom syntax required:** Standard `__()` works everywhere — Blade templates, controllers, Livewire components, middleware, etc.
+- **Laravel internals are filtered out:** The hook skips `validation.*`, `pagination.*`, `passwords.*`, `auth.*` and dot-notation group keys so they don't pollute your translation files
 
-1. **ScanUrlForStringsJob** dispatched for each active URL (where `is_api = 0`)
-2. `StringExtractor` enables collection mode via static property
-3. Job makes an internal Laravel request to the URL
-4. The `@__t()` directive detects collection mode and injects HTML comment markers
-5. HTML response is scanned for `<!--T_START:...:T_END-->` markers
-6. Collection mode is disabled in a `finally` block (guaranteed cleanup)
-7. Unique strings are extracted and saved to `lang/en.json`
-8. Progress tracking is updated via the `TranslationProgress` model
+#### 2. Active Scanning via URL Visits (on-demand)
+
+When you click "Collect Strings" in the dashboard:
+
+1. Queue jobs visit each URL internally via `app()->handle()`
+2. The page renders — every `__()` call throughout your templates fires the translator
+3. The missing key handler catches any new strings and adds them to `en.json`
+4. No HTML markers, no regex parsing, no collection mode flags — just Laravel's own translator doing the work
+
+The `StringExtractor` is now very simple:
+
+```php
+public function extractFromUrl(string $url): void
+{
+    $parsedUrl = parse_url($url);
+    $path = $parsedUrl['path'] ?? '/';
+    $query = $parsedUrl['query'] ?? '';
+    if ($query) $path .= '?' . $query;
+
+    $request = \Illuminate\Http\Request::create($path, 'GET');
+    app()->handle($request); // Missing key handler does the work
+}
+```
+
+It returns `void` — it doesn't extract or return anything. It just visits the page, and the `handleMissingKeysUsing` hook handles everything.
+
+This active scan is useful for:
+- **Initial setup** — sweep all pages at once to populate `en.json`
+- **After major template changes** — catch all new strings across the site
+- **Catching strings in unvisited pages** — pages that haven't had real user traffic yet
 
 ### Translation Process
 
@@ -1078,19 +1139,21 @@ This means:
 2. Existing translations loaded from target language files
 3. Untranslated strings identified
 4. **TranslateStringBatchJob** dispatched with batches of 20 strings
-5. OpenAI API called for each string
-6. Translations saved back to language files
+5. OpenAI API called for each string with the configured system prompt
+6. Translations saved back to language files (`lang/ar.json`, etc.)
 7. Progress tracking updated via the `TranslationProgress` model
 
 ### URL Collection from API Endpoints
 
 1. User adds API endpoint URLs in the dashboard
 2. `URLCollector` saves each endpoint with `is_api = 1`
-3. Each endpoint is fetched via HTTP GET
+3. Each endpoint is fetched (internal request for local URLs, HTTP for external)
 4. JSON array response is parsed
 5. Each URL from the response is saved as a regular URL (`is_api = 0`)
 6. Duplicate URLs are automatically skipped
 7. Saved endpoints can be re-fetched at any time to discover new content
+
+> **Local API detection:** When `api_scan_internal` is enabled (default), URLs pointing to `127.0.0.1`, `localhost`, or `::1` are fetched via internal Laravel requests (`app()->handle()`) instead of HTTP. This avoids the deadlock that occurs when `php artisan serve` (single-threaded) tries to make an HTTP request to itself.
 
 ### Language Routing
 
@@ -1139,7 +1202,7 @@ The `lang.blade.php` file generates proper SEO tags:
 
 ### Eloquent Models
 
-The system uses two Eloquent models instead of raw `DB::table()` queries for all database operations:
+The system uses three Eloquent models instead of raw `DB::table()` queries for all database operations:
 
 #### TranslationUrl Model
 
@@ -1189,6 +1252,35 @@ Computed attributes:
 - `$progress->percentage` — calculated completion percentage (0-100)
 - `$progress->status` — returns `'idle'`, `'running'`, or `'completed'`
 
+#### MissingTranslation Model
+
+```php
+use App\Models\Translate\MissingTranslation;
+
+// Record a missing key (upsert — increments occurrences if exists, creates if new)
+MissingTranslation::record('Hello World', 'ar');
+
+// Get all missing keys for a locale as a flat array
+$keys = MissingTranslation::keysForLocale('ar');
+
+// Query with scopes
+$missing = MissingTranslation::targetLocales()->recentFirst()->get();
+$missing = MissingTranslation::forLocale('ar')->mostFrequent()->get();
+$missing = MissingTranslation::since(now()->subDay())->get();
+
+// Clear operations
+MissingTranslation::clearLocale('ar');   // Clear all missing keys for Arabic
+MissingTranslation::clearAll();          // Clear all missing keys for all locales
+```
+
+Available scopes:
+- `forLocale($locale)` — where `locale = $locale`
+- `sourceLocale()` — where `locale = source_locale` (from config)
+- `targetLocales()` — where `locale != source_locale`
+- `recentFirst()` — order by `last_seen DESC`
+- `mostFrequent()` — order by `occurrences DESC`
+- `since($datetime)` — where `last_seen >= $datetime`
+
 ### API Endpoints for Dynamic URLs
 
 If you have dynamic content (products, articles, etc.), create API endpoints that return a flat JSON array of URLs:
@@ -1205,6 +1297,7 @@ Route::get('/sitemaps/blog', function () {
 ```
 
 Then add the endpoints in the dashboard's **API Endpoints** section:
+
 ```
 https://your-app.com/api/sitemaps/products
 https://your-app.com/api/sitemaps/blog
@@ -1216,6 +1309,8 @@ The system will:
 3. Import every URL from the response as a regular extractable URL
 4. Skip duplicates automatically
 5. Allow re-fetching at any time to pick up new content
+
+> **Local API detection:** When `api_scan_internal` is enabled in config (default), local endpoints (127.0.0.1, localhost) are fetched via internal Laravel requests instead of HTTP. This avoids the single-threaded `php artisan serve` deadlock where the server can't respond to itself.
 
 ### Custom Translation Prompts
 
@@ -1249,37 +1344,49 @@ The **Translation Status** tab shows completion percentage per language. Clickin
 
 This is useful for reviewing AI translations, fixing specific strings, or translating a few strings without running a full batch.
 
+### Missing Keys Dashboard
+
+The **Missing Keys** tab provides real-time visibility into untranslated strings detected from live traffic:
+
+- **Grouped by locale** — see which languages have the most gaps at a glance
+- **Occurrence tracking** — know which strings are hit most frequently so you can prioritize
+- **First/last seen timestamps** — understand when strings appeared and how recent they are
+- **Individual AI translate** — click ✨ on any row, a job dispatches immediately, the row disappears instantly
+- **Bulk translate per locale** — click "Translate All" on a locale group, the table rows hide and a progress bar appears with real-time updates
+- **Processing banner** — a top-of-tab indicator appears when any translations are in progress, showing batch locale names and per-locale progress bars
+- **Clear Resolved** — scans missing keys against the target locale JSON files and removes entries that have been translated since they were logged
+- **Clear All** — wipes the entire `missing_translations` table
+
 ## 🐛 Troubleshooting
 
 ### Strings Not Being Collected
 
-1. **Clear view cache** (important — stale compiled views won't have the runtime check):
-   ```bash
-   php artisan view:clear
+1. **Verify the service provider is registered** in `bootstrap/providers.php`:
+   ```php
+   App\Providers\Translate\TranslationServiceProvider::class,
    ```
 
-2. **Enable debug logging** in `config/translation.php`:
+2. **Test passive collection manually:**
+   ```bash
+   php artisan tinker
+   >>> __('test string that does not exist yet')
+   # Now check if it appeared in lang/en.json
+   ```
+
+3. **Enable debug logging** in `config/translation.php`:
    ```php
    'log_process' => true,
    ```
    Then check `storage/logs/laravel.log` for detailed extraction logs.
 
-3. **Verify routes are accessible:**
+4. **Verify routes are accessible:**
    ```bash
    curl http://127.0.0.1:8000/home
-   ```
-
-4. **Verify the service provider is registered** in `bootstrap/providers.php`:
-   ```php
-   App\Providers\Translate\TranslationServiceProvider::class,
    ```
 
 5. **Verify helper functions are autoloaded:**
    ```bash
    composer dump-autoload
-   php artisan tinker
-   >>> isCollectionMode()
-   # Should return false
    ```
 
 6. **Verify URLs exist in the database:**
@@ -1287,6 +1394,11 @@ This is useful for reviewing AI translations, fixing specific strings, or transl
    php artisan tinker
    >>> \App\Models\Translate\TranslationUrl::extractable()->count()
    # Should return > 0
+   ```
+
+7. **Clear view cache:**
+   ```bash
+   php artisan view:clear
    ```
 
 ### Translations Not Working
@@ -1367,6 +1479,29 @@ See [Routing System](#routing-system) for details.
    >>> \App\Models\Translate\TranslationUrl::apiEndpoints()->pluck('url')
    ```
 
+### Local API Endpoints Timing Out
+
+If API endpoints on `127.0.0.1` or `localhost` time out with `php artisan serve`, ensure `api_scan_internal` is enabled in config:
+
+```php
+// config/translation.php
+'urls' => [
+    'api_scan_internal' => true,
+],
+```
+
+This uses internal Laravel requests (`app()->handle()`) instead of HTTP to avoid the single-threaded server deadlock.
+
+### Missing Keys Not Appearing
+
+1. **Verify the hook is active** — the `TranslationServiceProvider` must be registered
+2. **Check that you're visiting a target locale:** Missing keys are only logged for target locales (e.g., `/ar/about`), not for the source locale (English). Source locale keys are added directly to `en.json`.
+3. **Check the table:**
+   ```bash
+   php artisan tinker
+   >>> \App\Models\Translate\MissingTranslation::count()
+   ```
+
 ## 📖 API Reference
 
 ### TranslationUrl Model
@@ -1396,6 +1531,30 @@ $record->percentage;  // float (0-100)
 $record->status;      // 'idle' | 'running' | 'completed'
 ```
 
+### MissingTranslation Model
+
+```php
+use App\Models\Translate\MissingTranslation;
+
+// Record a missing key (upsert with occurrence increment)
+MissingTranslation::record('About Us', 'ar');
+
+// Get flat array of keys for a locale
+$keys = MissingTranslation::keysForLocale('ar');
+
+// Scopes
+MissingTranslation::forLocale('ar');          // locale = 'ar'
+MissingTranslation::sourceLocale();           // locale = source_locale
+MissingTranslation::targetLocales();          // locale != source_locale
+MissingTranslation::recentFirst();            // ORDER BY last_seen DESC
+MissingTranslation::mostFrequent();           // ORDER BY occurrences DESC
+MissingTranslation::since(now()->subDay());   // last_seen >= given datetime
+
+// Clear operations
+MissingTranslation::clearLocale('ar');
+MissingTranslation::clearAll();
+```
+
 ### StringExtractor Service
 
 ```php
@@ -1403,17 +1562,13 @@ use App\Services\Translate\StringExtractor;
 
 $extractor = new StringExtractor();
 
-// Extract strings from a URL
-$keys = $extractor->extractFromUrl('https://your-app.com/home');
-
-// Save keys to language file
-$newCount = $extractor->saveToLanguageFile($keys, 'en');
+// Visit a URL internally — triggers handleMissingKeysUsing for all __() calls
+$extractor->extractFromUrl('https://your-app.com/home');
+// Returns void — the hook handles saving to en.json and logging to missing_translations
 
 // Get all keys from a language file
 $allKeys = $extractor->getAllKeys('en');
-
-// Check if collection mode is active
-$isActive = StringExtractor::$collectionMode;
+// Returns: ['Hello World' => 'Hello World', 'About Us' => 'About Us', ...]
 ```
 
 ### AITranslator Service
@@ -1508,13 +1663,7 @@ $url = langUrl('products.show', ['slug' => 'example']);
 if (isRoute('about')) {
     // Current page is About
 }
-
-// Check collection mode (useful in controllers/middleware)
-if (isCollectionMode()) {
-    // String extraction is currently running
-}
 ```
-
 
 ## 👨‍💻 Developer: 
 https://warmardev.com/
@@ -1530,6 +1679,7 @@ https://youtu.be/-NVuDoGsgv8
 This project is open-sourced software licensed under the [MIT license](LICENSE).
 
 ## 🙏 Credits
+
 Built with ❤️ using:
 - Laravel
 - Livewire
@@ -1537,6 +1687,7 @@ Built with ❤️ using:
 - TailwindCSS
 
 ## 📞 Support
+
 For issues, questions, or contributions:
 - Open an issue on GitHub.
 
