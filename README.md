@@ -1078,8 +1078,7 @@ Lang::handleMissingKeysUsing(function (string $key, ...) use ($buffer) {
         return $key;
     }
 
-    // Filter Laravel internals (validation.*, pagination.*, etc.)
-    // Filter dot-notation group keys (e.g., "messages.welcome")
+    // Filter empty keys and vendor package keys (package::group.key)
     // ...
 
     if ($locale === $sourceLocale) {
@@ -1116,7 +1115,7 @@ This means:
 - **Source locale (en):** Any `__('new string')` that isn't in `en.json` gets added automatically after the request — no scanning needed
 - **Target locales (ar, es, etc.):** Missing translations are upserted into the `translation_missing` table with occurrence counts, so you can see exactly what needs translating and how often
 - **Zero overhead for existing translations:** The callback only fires when a key is actually missing. Translated strings go through Laravel's normal fast path
-- **Laravel internals are filtered out:** The hook skips `validation.*`, `pagination.*`, `passwords.*`, `auth.*`, dot-notation group keys, and file path artifacts so they never pollute your translation files
+- **Minimal filtering needed:** Laravel resolves built-in keys (`auth.*`, `validation.*`, `pagination.*`, etc.) via its own lang files before the callback ever fires — only empty keys and vendor package keys (`package::group.key`) are filtered out
 
 #### 2. Active Scanning via URL Visits (on-demand)
 
