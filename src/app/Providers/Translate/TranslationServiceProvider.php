@@ -42,70 +42,69 @@ class TranslationServiceProvider extends ServiceProvider
         | Missing Key Handler
         |----------------------------------------------------------------------
         |
-        | Fires every time __() can't find a translation key.
-        | Filters out Laravel internals, then buffers valid keys.
+        | Fires only when __() can't find a key in JSON or group PHP
+        | files — Laravel resolves built-in keys (auth.*, validation.*,
+        | etc.) before this callback is ever reached.
         |
-        | Source locale keys (en) → saved to en.json by the job
-        | Target locale keys (ar, es...) → saved to missing_translations table
+        | Source keys (en) → saved to en.json by the job
+        | Target keys (ar, es...) → saved to missing_translations table
         |
         */
         Lang::handleMissingKeysUsing(function (string $key, array $replace, ?string $locale, bool $fallbackUsed) use ($buffer) {
             $locale = $locale ?? app()->getLocale();
             $sourceLocale = config('translation.source_locale', 'en');
 
-            // ── Collection Gate ─────────────────────────────────────────
-            // If runtime collection is off AND we're not in an active scan,
-            // skip entirely — zero overhead for normal requests.
+            /*
+            |------------------------------------------------------------------
+            | Collection Gate
+            |------------------------------------------------------------------
+            |
+            | If runtime collection is off AND we're not in an active scan,
+            | skip entirely — zero overhead for normal requests.
+            |
+            */
             $runtimeCollection = config('translation.extraction.runtime_collection', false);
+
             if (!$runtimeCollection && !StringExtractor::$collectionMode) {
                 return $key;
             }
 
-            // ── Filter: Empty Keys ──────────────────────────────────────
+            /*
+            |------------------------------------------------------------------
+            | Filter: Empty Keys
+            |------------------------------------------------------------------
+            |
+            | Edge case — __('') or dynamically generated empty strings.
+            |
+            */
             if (trim($key) === '') {
                 return $key;
             }
 
-            // ── Filter: File Path Artifacts ─────────────────────────────
-            // Laravel sometimes resolves group translation files to full
-            // Windows paths (e.g. "Users\\...\\lang\\en\\auth"). These
-            // contain backslashes — real translation strings never do.
-            if (str_contains($key, '\\')) {
+            /*
+            |------------------------------------------------------------------
+            | Filter: Vendor Package Keys
+            |------------------------------------------------------------------
+            |
+            | Keys like "package::group.key" come from third-party packages
+            | with missing translations. These are noise we don't control
+            | and shouldn't collect into our own translation files.
+            |
+            */
+            if (str_contains($key, '::')) {
                 return $key;
             }
 
-            // ── Filter: Bare Laravel Group Names ────────────────────────
-            // When Laravel looks up "auth" before resolving "auth.failed",
-            // the bare group name hits the handler first.
-            $skipGroups = ['auth', 'pagination', 'passwords', 'validation', 'http-statuses'];
-            if (in_array($key, $skipGroups, true)) {
-                return $key;
-            }
-
-            // ── Filter: Laravel Internal Prefixes ───────────────────────
-            // Dot-notation keys from Laravel's built-in lang files.
-            $skipPrefixes = ['validation.', 'pagination.', 'passwords.', 'auth.', 'http-statuses.'];
-            foreach ($skipPrefixes as $prefix) {
-                if (str_starts_with($key, $prefix)) {
-                    return $key;
-                }
-            }
-
-            // ── Filter: Dot-Notation Group Keys ─────────────────────────
-            // Keys like "messages.welcome" are file-based group translations,
-            // not JSON keys. JSON keys use full sentences with spaces.
-            if (preg_match('/^[a-z_]+\.[a-z_]+/i', $key) && !str_contains($key, ' ')) {
-                return $key;
-            }
-
-            // ── Filter: HTTP Status Messages ────────────────────────────
-            // 404/500 error pages trigger __() with these status messages.
-            $skipExact = ['Not Found', 'Server Error', 'Forbidden', 'Unauthorized'];
-            if (in_array($key, $skipExact, true)) {
-                return $key;
-            }
-
-            // ── Buffer the Key ──────────────────────────────────────────
+            /*
+            |------------------------------------------------------------------
+            | Buffer the Key
+            |------------------------------------------------------------------
+            |
+            | Source locale (en) keys are new strings to add to en.json.
+            | Target locale keys are strings that exist in source but
+            | haven't been translated yet for the requested locale.
+            |
+            */
             if ($locale === $sourceLocale) {
                 $buffer->addSourceKey($key);
             } else {
