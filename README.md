@@ -26,7 +26,7 @@ A **complete multilingual framework** for Laravel applications. This isn't just 
 
 ### 🎯 Core Translation Features
 
-- 🤖 **AI-Powered Translations**: Leverages OpenAI GPT-4 for context-aware, high-quality translations
+- 🤖 **AI-Powered Translations**: Leverages OpenAI GPT-4 for high-quality translations
 - 🔍 **Dual String Collection**: Active URL scanning + passive detection via Laravel's native `handleMissingKeysUsing` hook — new strings are caught automatically from live traffic. A configurable `runtime_collection` flag controls whether passive collection runs on every request or only during active scans, giving you full control over production overhead
 - 🌐 **Multi-Language Support**: Translate your entire application into unlimited languages
 - 📊 **Real-Time Dashboard**: Beautiful Livewire-powered interface with live progress tracking
