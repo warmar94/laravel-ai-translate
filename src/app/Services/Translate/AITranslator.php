@@ -27,7 +27,7 @@ class AITranslator
     public function __construct()
     {
         $this->apiKey       = config('translation.translation.api_key');
-        $this->model        = config('translation.translation.model', 'gpt-4o-mini');
+        $this->model        = config('translation.translation.model', 'gpt-4.1-nano');
         $this->systemPrompt = config('translation.translation.system_prompt', 'Translate to {language}');
         $this->languages    = config('translation.languages', []);
         $this->logProcess   = config('translation.log_process', false);

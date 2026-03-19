@@ -94,7 +94,7 @@ class InstallAiTranslateCommand extends Command
         );
         $this->newLine();
         $this->line('  <fg=green>OPENAI_API_KEY=your-api-key-here</>');
-        $this->line('  <fg=green>OPENAI_MODEL=gpt-4o-mini</>');
+        $this->line('  <fg=green>OPENAI_MODEL=gpt-4.1-nano</>');
 
         $this->newLine();
         $this->info('You\'re all set! 🚀');

@@ -107,7 +107,7 @@ return [
     */
     'translation' => [
         'ai_provider' => 'openai',
-        'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'model' => env('OPENAI_MODEL', 'gpt-4.1-nano'),
         'api_key' => env('OPENAI_API_KEY'),
         'batch_size' => 20,
         'concurrent_jobs' => 5,

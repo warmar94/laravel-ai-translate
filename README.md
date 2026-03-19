@@ -149,7 +149,7 @@ Add your OpenAI API key to `.env`:
 
 ```env
 OPENAI_API_KEY=your-api-key-here
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4.1-nano
 ```
 
 That's it for `.env`. All other translation settings are managed directly in `config/translation.php` (see [Configuration](#configuration)).
@@ -787,7 +787,7 @@ return [
     // AI translation settings
     'translation' => [
         'ai_provider' => 'openai',
-        'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'model' => env('OPENAI_MODEL', 'gpt-4.1-nano'),
         'api_key' => env('OPENAI_API_KEY'),
         'batch_size' => 20,
         'concurrent_jobs' => 5,
