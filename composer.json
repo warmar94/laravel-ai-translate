@@ -31,8 +31,8 @@
         "docs": "https://warmardev.com/docs/laravel-translate.html"
     },
     "require": {
-        "php": "^8.2|^8.3",
-        "laravel/framework": "^11.0|^12.0",
+        "php": "^8.2|^8.3|^8.4",
+        "laravel/framework": "^11.0|^12.0|^13.0",
         "livewire/livewire": "^3.0|^4.0"
     },
     "autoload": {
