@@ -44,13 +44,16 @@ class InstallAiTranslateCommand extends Command
         $this->newLine();
         $this->info('Publishing complete!');
 
-        // Optional: migrate
-        if ($this->confirm('Would you like to run migrations now?', true)) {
-            $this->call('migrate');
-        }
-
         $this->newLine();
         $this->components->info('Almost done! Complete these final steps:');
+
+        // Step 0: Run migrations
+        $this->newLine();
+        $this->components->twoColumnDetail(
+            '<fg=yellow>Step 0</>',
+            'Run the migrations'
+        );
+        $this->line('  <fg=green>php artisan migrate</>');
 
         // Step 1: Register service provider
         $this->newLine();
