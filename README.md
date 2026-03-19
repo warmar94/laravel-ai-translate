@@ -206,8 +206,6 @@ php artisan queue:work
 
 ### 9. Create Required Database Tables
 
-The system uses three database tables managed via Eloquent models. If you installed via the Laravel install command, skip this step.
-
 #### Option A: Laravel Migrations
 
 ```bash
