@@ -20,14 +20,18 @@ use Illuminate\Support\Facades\Log;
  *
  * Writes translated strings directly to lang/{locale}.json and
  * updates the TranslationProgress model for real-time dashboard display.
+ *
+ * Rate limiting is handled inside AITranslator — strings that hit the
+ * limit are silently skipped, jobs never block each other.
  */
 class TranslateStringBatchJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 120;
+    public $timeout = 300;
     public $tries = 3;
     public $maxExceptions = 2;
+    public $backoff = [30, 60, 120];
     protected $logProcess = false;
 
     public function __construct(
@@ -39,78 +43,61 @@ class TranslateStringBatchJob implements ShouldQueue
 
     public function handle(AITranslator $translator): void
     {
-        try {
-            $filePath = lang_path("{$this->targetLocale}.json");
+        $filePath = lang_path("{$this->targetLocale}.json");
 
-            // Load existing translations
-            $existing = [];
-            if (file_exists($filePath)) {
-                $existing = json_decode(file_get_contents($filePath), true) ?? [];
+        // Load existing translations
+        $existing = [];
+        if (file_exists($filePath)) {
+            $existing = json_decode(file_get_contents($filePath), true) ?? [];
+        }
+
+        $translatedCount = 0;
+
+        foreach ($this->strings as $key => $sourceText) {
+            // Skip if already translated (value differs from key)
+            if (isset($existing[$key]) && $existing[$key] !== $key) {
+                continue;
             }
 
-            $translatedCount = 0;
+            $translated = $translator->translate($sourceText, $this->targetLocale);
 
-            foreach ($this->strings as $key => $sourceText) {
-                // Skip if already translated (value differs from key)
-                if (isset($existing[$key]) && $existing[$key] !== $key) {
-                    continue;
-                }
-
-                $translated = $translator->translate($sourceText, $this->targetLocale);
-
-                if ($translated) {
-                    $existing[$key] = $translated;
-                    $translatedCount++;
-                }
-
-                // Small delay between API calls to respect rate limits
-                usleep(100000); // 0.1s
+            if ($translated) {
+                $existing[$key] = $translated;
+                $translatedCount++;
             }
 
-            // Write back if we translated anything
-            if ($translatedCount > 0) {
-                ksort($existing);
+            // Scale delay by string length to respect TPM limits
+            $delay = min(500000, 100000 + (int)(strlen($sourceText) / 10) * 1000);
+            usleep($delay);
+        }
 
-                file_put_contents(
-                    $filePath,
-                    json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-                );
+        // Write back if we translated anything
+        if ($translatedCount > 0) {
+            ksort($existing);
 
-                if ($this->logProcess) {
-                    Log::info("Translated {$translatedCount} strings to {$this->targetLocale}");
-                }
+            file_put_contents(
+                $filePath,
+                json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            );
+
+            if ($this->logProcess) {
+                Log::info("Translated {$translatedCount} strings to {$this->targetLocale}");
             }
+        }
 
-            // Update progress for dashboard display
-            $progress = TranslationProgress::translation()
-                ->forLocale($this->targetLocale)
-                ->first();
+        // Update progress for dashboard display
+        $progress = TranslationProgress::translation()
+            ->forLocale($this->targetLocale)
+            ->first();
 
-            if ($progress) {
-                $newCompleted = $progress->completed + count($this->strings);
+        if ($progress) {
+            $newCompleted = $progress->completed + count($this->strings);
 
-                $progress->update([
-                    'completed' => $newCompleted,
-                    'updated_at' => now(),
-                    'completed_at' => $newCompleted >= $progress->total ? now() : null,
-                ]);
-            }
-
-        } catch (\Exception $e) {
-            Log::error("Translation batch failed for {$this->targetLocale}", [
-                'error' => $e->getMessage(),
+            $progress->update([
+                'completed'    => $newCompleted,
+                'updated_at'   => now(),
+                'completed_at' => $newCompleted >= $progress->total ? now() : null,
             ]);
-
-            $progress = TranslationProgress::translation()
-                ->forLocale($this->targetLocale)
-                ->first();
-
-            if ($progress) {
-                $progress->increment('failed', count($this->strings));
-                $progress->update(['updated_at' => now()]);
-            }
-
-            throw $e;
         }
     }
 
@@ -119,5 +106,14 @@ class TranslateStringBatchJob implements ShouldQueue
         Log::error("Translation job permanently failed for {$this->targetLocale}", [
             'error' => $exception->getMessage(),
         ]);
+
+        $progress = TranslationProgress::translation()
+            ->forLocale($this->targetLocale)
+            ->first();
+
+        if ($progress) {
+            $progress->increment('failed', count($this->strings));
+            $progress->update(['updated_at' => now()]);
+        }
     }
 }

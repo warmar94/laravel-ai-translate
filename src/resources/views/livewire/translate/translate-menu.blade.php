@@ -353,16 +353,44 @@
     {{-- Tab: Translate                                                         --}}
     {{-- ═══════════════════════════════════════════════════════════════════════ --}}
     @if($activeTab === 'translate')
+        @php $anyRunning = collect($translationProgress)->contains('status', 'running'); @endphp
         <div class="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl p-6">
             <div class="flex items-center gap-3 mb-4">
                 <span class="inline-flex items-center px-2.5 py-0.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded">Step 3</span>
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Translate All Keys</h2>
             </div>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Use AI to translate all collected strings to target languages.</p>
 
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">Use AI to translate all collected strings to target languages.</p>
+            {{-- Action buttons — above progress bars --}}
+            <div class="flex gap-3 mb-6">
+            @if(!$anyRunning)
+                <button 
+                    x-data="{ loading: false }"
+                    x-on:click="loading = true"
+                    wire:click="translateAll" 
+                    wire:loading.attr="disabled"
+                    :disabled="loading"
+                    :class="loading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-700'"
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg transition-colors"
+                >
+                    <svg x-show="!loading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
+                    </svg>
+                    <svg x-show="loading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4z"/>
+                    </svg>
+                    <span x-text="loading ? 'Queuing jobs...' : 'Translate All Keys'"></span>
+                </button>
+            @endif
+                <button wire:click="refreshProgress" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Refresh
+                </button>
+            </div>
 
             @if(!empty($translationProgress))
-                <div class="space-y-4 mb-6">
+                <div class="space-y-4">
                     @foreach($translationProgress as $locale => $progress)
                         <div class="border border-gray-200 dark:border-zinc-700 rounded-lg p-4">
                             <div class="flex items-center justify-between mb-3">
@@ -371,7 +399,6 @@
                                         {{ config('translation.languages.' . $locale, strtoupper($locale)) }}
                                     </span>
                                     <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 rounded uppercase">{{ $locale }}</span>
-
                                     @if($progress['status'] !== 'idle')
                                         <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded
                                             {{ match($progress['status']) {
@@ -383,7 +410,6 @@
                                         </span>
                                     @endif
                                 </div>
-
                                 <span class="text-sm text-gray-600 dark:text-gray-400">
                                     <span class="font-semibold text-gray-900 dark:text-white">{{ $progress['completed'] }}</span> / {{ $progress['total'] }}
                                     @if($progress['failed'] > 0)
@@ -391,7 +417,6 @@
                                     @endif
                                 </span>
                             </div>
-
                             <div class="w-full bg-gray-200 dark:bg-zinc-700 rounded-full h-2.5 overflow-hidden">
                                 <div
                                     class="h-2.5 rounded-full transition-all duration-500 {{ $progress['status'] === 'completed' ? 'bg-green-500' : 'bg-purple-500' }}"
@@ -403,18 +428,6 @@
                 </div>
             @endif
 
-            <div class="flex gap-3">
-                <button wire:click="translateAll" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>
-                    Translate All Keys
-                </button>
-
-                <button wire:click="refreshProgress" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    Refresh
-                </button>
-            </div>
-
             @if($totalKeysInEnJson == 0)
                 <p class="text-sm text-yellow-600 dark:text-yellow-400 mt-3 flex items-center gap-1.5">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
@@ -423,7 +436,7 @@
             @endif
         </div>
     @endif
-
+    
     {{-- ═══════════════════════════════════════════════════════════════════════ --}}
     {{-- Tab: Translation Status                                                --}}
     {{-- ═══════════════════════════════════════════════════════════════════════ --}}

@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Layout;
 
-#[Layout('layouts.translate')]
+#[Layout('layouts.shop.admin')]
 #[Title('Translation Manager')]
 class TranslateMenu extends Component
 {
@@ -58,7 +58,6 @@ class TranslateMenu extends Component
     // String editor
     public string $editingLocale = '';
     public string $stringSearch = '';
-    public array $editableStrings = [];
     public bool $showStringEditor = false;
 
     // Missing keys tab
@@ -341,8 +340,11 @@ class TranslateMenu extends Component
 
             $locales = $translator->getTargetLocales();
             $batchSize = config('translation.translation.batch_size', 20);
-            $totalUntranslated = 0;
 
+            // ── Step 1: Build per-locale untranslated string sets ──────────────
+            // Do this first so we can create all progress records before
+            // dispatching any jobs — dashboard shows everything immediately.
+            $localeWork = [];
             foreach ($locales as $locale) {
                 $existing = $extractor->getAllKeys($locale);
                 $untranslated = [];
@@ -355,8 +357,18 @@ class TranslateMenu extends Component
 
                 if (empty($untranslated)) continue;
 
-                $totalUntranslated += count($untranslated);
+                $localeWork[$locale] = $untranslated;
+            }
 
+            if (empty($localeWork)) {
+                $this->statusMessage = "All strings are already translated!";
+                $this->statusType = 'info';
+                return;
+            }
+
+            // ── Step 2: Create all progress records upfront ─────────────────────
+            // Dashboard can display all languages + totals before a single job runs.
+            foreach ($localeWork as $locale => $untranslated) {
                 TranslationProgress::updateOrCreate(
                     ['type' => 'translation', 'locale' => $locale],
                     [
@@ -368,21 +380,23 @@ class TranslateMenu extends Component
                         'completed_at' => null,
                     ]
                 );
+            }
 
+            // ── Step 3: Dispatch batches locale by locale ───────────────────────
+            // Jobs are queued in insertion order and workers pick by ID (FIFO),
+            // so dispatching all of German's batches before French's batches
+            // guarantees they execute in that order — no chain magic needed.
+            foreach ($localeWork as $locale => $untranslated) {
                 $batches = array_chunk($untranslated, $batchSize, true);
                 foreach ($batches as $batch) {
                     TranslateStringBatchJob::dispatch($batch, $locale);
                 }
             }
 
-            if ($totalUntranslated == 0) {
-                $this->statusMessage = "All strings are already translated!";
-                $this->statusType = 'info';
-            } else {
-                $this->statusMessage = "Started translating {$totalUntranslated} strings to " . count($locales) . " languages!";
-                $this->statusType = 'success';
-                $this->isProcessing = true;
-            }
+            $totalUntranslated = array_sum(array_map('count', $localeWork));
+            $this->statusMessage = "Queued {$totalUntranslated} strings across " . count($localeWork) . " languages — processing language by language.";
+            $this->statusType = 'success';
+            $this->isProcessing = true;
 
             $this->loadProgress();
         } catch (\Exception $e) {
@@ -461,7 +475,6 @@ class TranslateMenu extends Component
             return;
         }
 
-        // Dispatch as a single-item batch job
         TranslateStringBatchJob::dispatch(
             [$missing->key => $missing->key],
             $missing->locale
@@ -587,21 +600,21 @@ class TranslateMenu extends Component
 
     // ─── String Editor ───//
 
-    public function openLocaleEditor(string $locale)
+    /**
+     * Computed property — never stored in Livewire payload.
+     * Replaces the old $editableStrings public array.
+     */
+    public function getEditableStringsProperty(): array
     {
-        $this->editingLocale = $locale;
-        $this->stringSearch = '';
-        $this->loadEditableStrings();
-        $this->showStringEditor = true;
-    }
+        if (empty($this->editingLocale) || !$this->showStringEditor) {
+            return [];
+        }
 
-    public function loadEditableStrings()
-    {
         $extractor = new StringExtractor();
         $enKeys = $extractor->getAllKeys('en');
         $targetKeys = $extractor->getAllKeys($this->editingLocale);
 
-        $this->editableStrings = [];
+        $results = [];
 
         foreach ($enKeys as $key => $enValue) {
             $targetValue = $targetKeys[$key] ?? '';
@@ -617,18 +630,37 @@ class TranslateMenu extends Component
                 }
             }
 
-            $this->editableStrings[] = [
+            $results[] = [
                 'key' => $key,
                 'en' => $enValue,
                 'target' => $targetValue,
                 'is_translated' => $isTranslated,
             ];
         }
+
+        return $results;
+    }
+
+    public function openLocaleEditor(string $locale)
+    {
+        $this->editingLocale = $locale;
+        $this->stringSearch = '';
+        $this->showStringEditor = true;
+    }
+
+    public function updatedEditingLocale($value)
+    {
+        if ($value) {
+            $this->stringSearch = '';
+            $this->showStringEditor = true;
+        } else {
+            $this->showStringEditor = false;
+        }
     }
 
     public function updatedStringSearch()
     {
-        $this->loadEditableStrings();
+        // Computed property re-evaluates automatically — nothing needed here.
     }
 
     public function saveStringTranslation(string $key, string $value)
@@ -649,7 +681,6 @@ class TranslateMenu extends Component
             json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
         );
 
-        $this->loadEditableStrings();
         $this->loadTranslationStatus();
         $this->statusMessage = "Translation saved.";
         $this->statusType = 'success';
@@ -686,7 +717,6 @@ class TranslateMenu extends Component
     {
         $this->showStringEditor = false;
         $this->editingLocale = '';
-        $this->editableStrings = [];
         $this->stringSearch = '';
     }
 
@@ -711,11 +741,16 @@ class TranslateMenu extends Component
         if ($value === 'missing') {
             $this->loadMissingKeys();
         }
+        if ($value === 'edit' && $this->editingLocale) {
+            $this->showStringEditor = true;
+        }
     }
 
     public function render()
     {
-        return view('livewire.translate.translate-menu')
+        return view('livewire.translate.translate-menu', [
+            'editableStrings' => $this->editableStrings,
+        ])
             ->layoutData([
                 'title' => 'Translation Manager',
                 'description' => 'Translation and localization management tools.',
