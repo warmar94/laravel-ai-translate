@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Layout;
 
-#[Layout('layouts.shop.admin')]
+#[Layout('components.layouts.translate')]
 #[Title('Translation Manager')]
 class TranslateMenu extends Component
 {
