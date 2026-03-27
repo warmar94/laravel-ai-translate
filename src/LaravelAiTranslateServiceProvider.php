@@ -14,13 +14,14 @@ class LaravelAiTranslateServiceProvider extends ServiceProvider
                 InstallAiTranslateCommand::class,
             ]);
 
-            // Migrations ─ publish the whole folder (recommended)
+            // Migrations
             $this->publishes([
                 __DIR__ . '/database/migrations' => database_path('migrations'),
             ], 'ai-translate-migrations');
         }
 
-        // App files (models, services, jobs, livewire, middleware, providers, helpers)
+        // App files — models, services, jobs, commands, livewire, middleware, providers, helpers
+        // Console/Commands/Translate/ is included here automatically.
         $this->publishes([
             __DIR__ . '/app' => app_path(),
         ], 'ai-translate-app');

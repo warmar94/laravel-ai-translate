@@ -34,7 +34,8 @@ class InstallAiTranslateCommand extends Command
             '--force' => true,
         ]);
 
-        // Publish app files (models, services, jobs, livewire, middleware, providers, helpers)
+        // Publish all app files — models, services, jobs, commands, livewire,
+        // middleware, providers, helpers. Console/Commands/Translate/ is included.
         $this->call('vendor:publish', [
             '--provider' => 'Warmar\\LaravelAiTranslate\\LaravelAiTranslateServiceProvider',
             '--tag' => 'ai-translate-app',
@@ -49,28 +50,19 @@ class InstallAiTranslateCommand extends Command
 
         // Step 0: Run migrations
         $this->newLine();
-        $this->components->twoColumnDetail(
-            '<fg=yellow>Step 0</>',
-            'Run the migrations'
-        );
+        $this->components->twoColumnDetail('<fg=yellow>Step 0</>', 'Run the migrations');
         $this->line('  <fg=green>php artisan migrate</>');
 
         // Step 1: Register service provider
         $this->newLine();
-        $this->components->twoColumnDetail(
-            '<fg=yellow>Step 1</>',
-            'Register the TranslationServiceProvider'
-        );
+        $this->components->twoColumnDetail('<fg=yellow>Step 1</>', 'Register the TranslationServiceProvider');
         $this->line('  Add to <comment>bootstrap/providers.php</comment>:');
         $this->newLine();
         $this->line('  <fg=green>App\Providers\Translate\TranslationServiceProvider::class,</>');
 
         // Step 2: Register helper in composer.json
         $this->newLine();
-        $this->components->twoColumnDetail(
-            '<fg=yellow>Step 2</>',
-            'Register the global helper functions'
-        );
+        $this->components->twoColumnDetail('<fg=yellow>Step 2</>', 'Register the global helper functions');
         $this->line('  Add to the <comment>autoload.files</comment> array in <comment>composer.json</comment>:');
         $this->newLine();
         $this->line('  <fg=green>"app/Helpers/Translate/TranslationHelper.php"</>');
@@ -79,10 +71,7 @@ class InstallAiTranslateCommand extends Command
 
         // Step 3: Register middleware
         $this->newLine();
-        $this->components->twoColumnDetail(
-            '<fg=yellow>Step 3</>',
-            'Register the language middleware'
-        );
+        $this->components->twoColumnDetail('<fg=yellow>Step 3</>', 'Register the language middleware');
         $this->line('  Add to <comment>bootstrap/app.php</comment> withMiddleware:');
         $this->newLine();
         $this->line('  <fg=green>$middleware->alias([</>');
@@ -91,13 +80,20 @@ class InstallAiTranslateCommand extends Command
 
         // Step 4: Set env
         $this->newLine();
-        $this->components->twoColumnDetail(
-            '<fg=yellow>Step 4</>',
-            'Add your OpenAI API key to .env'
-        );
+        $this->components->twoColumnDetail('<fg=yellow>Step 4</>', 'Add your OpenAI API key to .env');
         $this->newLine();
         $this->line('  <fg=green>OPENAI_API_KEY=your-api-key-here</>');
         $this->line('  <fg=green>OPENAI_MODEL=gpt-4.1-nano</>');
+
+        // Step 5: Schedule commands (Laravel 13 — routes/console.php)
+        $this->newLine();
+        $this->components->twoColumnDetail('<fg=yellow>Step 5 (optional)</>', 'Schedule daily automation');
+        $this->line('  Add to <comment>routes/console.php</comment>:');
+        $this->newLine();
+        $this->line('  <fg=green>use Illuminate\Support\Facades\Schedule;</>');
+        $this->newLine();
+        $this->line('  <fg=green>Schedule::command(\'translate:extract\')->dailyAt(\'02:00\');</>');
+        $this->line('  <fg=green>Schedule::command(\'translate:run\')->dailyAt(\'03:00\');</>');
 
         $this->newLine();
         $this->info('You\'re all set! 🚀');
