@@ -33,6 +33,11 @@ class LanguageMiddleware
                 return redirect($pathWithoutLang ?: '/', 301);
             }
 
+            // /de/ → /de (canonical, no trailing slash on language homepage)
+            if ($request->getPathInfo() === '/' . $lang . '/') {
+                return redirect($request->getSchemeAndHttpHost() . '/' . $lang, 301);
+            }
+
             // Valid non-English language prefix
             Session::put('language', $lang);
             app()->setLocale($lang);
